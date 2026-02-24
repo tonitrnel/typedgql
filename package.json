@@ -1,6 +1,6 @@
 {
   "name": "@ptdgrp/typedgql",
-  "version": "1.0.0",
+  "version": "1.0.0-beta.0",
   "description": "Strongly typed GraphQL client code generator and runtime",
   "type": "module",
   "author": "tonitrnel",
@@ -11,7 +11,10 @@
     }
   ],
   "license": "MIT",
-  "repository": "https://github.com/ptdgrp/typedgql",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ptdgrp/typedgql"
+  },
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
   "types": "./index.ts",
