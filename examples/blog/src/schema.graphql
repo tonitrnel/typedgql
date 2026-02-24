@@ -1,0 +1,52 @@
+type Query {
+  posts(limit: Int, offset: Int): [Post!]!
+  post(id: ID!): Post
+  author(id: ID!): Author
+}
+
+type Mutation {
+  createPost(input: CreatePostInput!): Post!
+  addComment(input: AddCommentInput!): Comment!
+}
+
+type Post {
+  id: ID!
+  title: String!
+  content: String!
+  publishedAt: String
+  author: Author!
+  comments: [Comment!]!
+  tags: [Tag!]!
+}
+
+type Author {
+  id: ID!
+  name: String!
+  bio: String
+  posts: [Post!]!
+}
+
+type Comment {
+  id: ID!
+  body: String!
+  createdAt: String!
+  author: Author!
+}
+
+type Tag {
+  id: ID!
+  name: String!
+}
+
+input CreatePostInput {
+  title: String!
+  content: String!
+  authorId: ID!
+  tagIds: [ID!]
+}
+
+input AddCommentInput {
+  postId: ID!
+  body: String!
+  authorId: ID!
+}

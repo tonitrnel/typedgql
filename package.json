@@ -1,0 +1,79 @@
+{
+  "name": "@ptdgrp/typedgql",
+  "version": "1.0.0",
+  "description": "Strongly typed GraphQL client code generator and runtime",
+  "type": "module",
+  "author": "tonitrnel",
+  "contributors": [
+    {
+      "name": "ChenTao",
+      "url": "https://github.com/babyfish-ct"
+    }
+  ],
+  "license": "MIT",
+  "repository": "https://github.com/ptdgrp/typedgql",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.mjs",
+  "types": "./index.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./index.ts",
+        "default": "./index.ts"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./vite": {
+      "import": {
+        "types": "./dist/vite.d.mts",
+        "default": "./dist/vite.mjs"
+      },
+      "require": {
+        "types": "./dist/vite.d.cts",
+        "default": "./dist/vite.cjs"
+      }
+    },
+    "./node": {
+      "import": {
+        "types": "./dist/node.d.mts",
+        "default": "./dist/node.mjs"
+      },
+      "require": {
+        "types": "./dist/node.d.cts",
+        "default": "./dist/node.cjs"
+      }
+    }
+  },
+  "files": [
+    "/dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "dev": "tsdown --watch",
+    "test": "vitest --run"
+  },
+  "peerDependencies": {
+    "graphql": ">=15.0.0",
+    "typescript": ">=5.0.0",
+    "vite": ">=5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.0",
+    "fast-check": "^4.5.3",
+    "graphql": "^16.0.0",
+    "tsdown": "0.20.3",
+    "typescript": "^5.8.0",
+    "vitest": "^4.0.18"
+  }
+}

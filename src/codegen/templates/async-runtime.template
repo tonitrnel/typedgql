@@ -1,0 +1,160 @@
+import type { Selection } from "../dist/index.mjs";
+import { TextBuilder, runtimeOf } from "../dist/index.mjs";
+
+export type GraphQLExecutor = (
+  request: string,
+  variables: Record<string, unknown>,
+) => Promise<any>;
+
+export type GraphQLSubscriber = (
+  request: string,
+  variables: Record<string, unknown>,
+) => AsyncIterable<any> | Promise<AsyncIterable<any>>;
+
+// Set global fallback executor used by `execute(...)`.
+export function setGraphQLExecutor(executor: GraphQLExecutor) {
+  graphQLExecutor = executor;
+}
+
+// Set global fallback subscriber used by `subscribe(...)`.
+export function setGraphQLSubscriber(subscriber: GraphQLSubscriber) {
+  graphQLSubscriber = subscriber;
+}
+export type Simplify<T> = SimplifyDepth<T>;
+type Primitive = string | number | boolean | bigint | symbol | null | undefined;
+type Dec = [0,0,1,2,3,4,5,6,7,8,9];
+export type SimplifyDepth<T, D extends number = 5> =
+  D extends 0 ? T :
+  T extends Primitive | Function ? T :
+  T extends readonly (infer U)[] ? readonly SimplifyDepth<U, Dec[D]>[] :
+  T extends object ? { [K in keyof T]: SimplifyDepth<T[K], Dec[D]> } & {} :
+  T;
+
+export async function execute<
+  TData extends object,
+  TVariables extends Record<string, unknown>,
+>(
+  selection: Selection<"Query" | "Mutation", TData, TVariables>,
+  options?: {
+    readonly operationName?: string;
+    readonly variables?: TVariables;
+    readonly executor?: GraphQLExecutor;
+  },
+): Promise<Simplify<TData>> {
+  // Per-call override has priority over the globally registered executor.
+  const executor = options?.executor ?? graphQLExecutor;
+  if (executor === undefined) {
+    throw new Error(
+      "Executor not set. Call 'setGraphQLExecutor' first or pass executor in options.",
+    );
+  }
+
+  const request = buildRequest(selection, options?.operationName);
+  const rawResponse = exceptNullValues(
+    await executor(request, options?.variables ?? {}),
+  );
+  // GraphQL transport errors are surfaced as exceptions.
+  if (rawResponse.errors) {
+    throw new GraphQLError(rawResponse.errors);
+  }
+  return rawResponse.data as unknown as Simplify<TData>;
+}
+
+export async function* subscribe<
+  TData extends object,
+  TVariables extends Record<string, unknown>,
+>(
+  selection: Selection<"Subscription", TData, TVariables>,
+  options?: {
+    readonly operationName?: string;
+    readonly variables?: TVariables;
+    readonly subscriber?: GraphQLSubscriber;
+  },
+): AsyncIterable<Simplify<TData>> {
+  // Per-call override has priority over the globally registered subscriber.
+  const subscriber = options?.subscriber ?? graphQLSubscriber;
+  if (subscriber === undefined) {
+    throw new Error(
+      "Subscriber not set. Call 'setGraphQLSubscriber' first or pass subscriber in options.",
+    );
+  }
+
+  const request = buildRequest(selection, options?.operationName);
+  const stream = await subscriber(request, options?.variables ?? {});
+  // Stream payloads follow standard GraphQL response shape.
+  for await (const payload of stream) {
+    const rawResponse = exceptNullValues(payload);
+    if (rawResponse.errors) {
+      throw new GraphQLError(rawResponse.errors);
+    }
+    yield rawResponse.data as unknown as Simplify<TData>;
+  }
+}
+
+export interface Response<TData> {
+  readonly data?: TData;
+  readonly error?: Error;
+}
+
+export class GraphQLError extends Error {
+  readonly errors: readonly GraphQLSubError[];
+
+  constructor(errors: any) {
+    super();
+    this.errors = errors;
+  }
+}
+
+export interface GraphQLSubError {
+  readonly message: string;
+  readonly path: string[];
+}
+
+let graphQLExecutor: GraphQLExecutor | undefined = undefined;
+let graphQLSubscriber: GraphQLSubscriber | undefined = undefined;
+
+// Build GraphQL document from selection tree and inferred variable declarations.
+function buildRequest<
+  TData extends object,
+  TVariables extends Record<string, unknown>,
+>(
+  selection: Selection<"Query" | "Mutation" | "Subscription", TData, TVariables>,
+  operationName?: string,
+): string {
+  const runtime = runtimeOf(selection);
+  const writer = new TextBuilder();
+  writer.text(`${runtime.schemaType.name.toLowerCase()} ${operationName ?? ""}`);
+  if (runtime.variableTypeMap.size !== 0) {
+    writer.scope(
+      {
+        type: "arguments",
+        multiLines: runtime.variableTypeMap.size > 2,
+        suffix: " ",
+      },
+      () => {
+        for (const [name, type] of runtime.variableTypeMap) {
+          writer.separator();
+          writer.text(`$${name}: ${type}`);
+        }
+      },
+    );
+  }
+  writer.text(selection.toString());
+  writer.text(selection.toFragmentString());
+  return writer.toString();
+}
+
+// Convert all nullable fields to `undefined` for easier TS optional-field ergonomics.
+function exceptNullValues<T>(value: T): T {
+  if (value == null) return undefined as any;
+  if (typeof value !== "object") return value;
+  if (Array.isArray(value)) {
+    return value.map((el) => el == null ? undefined : exceptNullValues(el)) as any;
+  }
+  const out: any = {};
+  for (const k in value) {
+    const v = value[k];
+    out[k] = v != null ? exceptNullValues(v) : undefined;
+  }
+  return out;
+}

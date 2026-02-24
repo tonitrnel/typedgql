@@ -1,1 +1,0 @@
-export const REASON_COMPUTED_AVG_SALARY = "computedAvgSalary";
