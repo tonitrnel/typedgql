@@ -1,0 +1,66 @@
+name: Publish NPM
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: publish-npm
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
+
+      - name: Setup Node.js 25.6.1
+        uses: actions/setup-node@v4
+        with:
+          node-version: 25.6.1
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+          registry-url: https://registry.npmjs.org
+
+      - name: Pin npm 11.9.0
+        run: npm i -g npm@11.9.0
+
+      - name: Install dependencies (cached/offline-first)
+        run: |
+          pnpm fetch --prefer-offline
+          pnpm install --frozen-lockfile --offline
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: Compute npm dist-tag
+        id: dist_tag
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          if [[ "$VERSION" == *-* ]]; then
+            DIST_TAG="$(echo "$VERSION" | sed -E 's/^[0-9]+\.[0-9]+\.[0-9]+-([^.]+).*/\1/')"
+          else
+            DIST_TAG="latest"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
+          echo "Publishing version $VERSION with dist-tag $DIST_TAG"
+
+      - name: Publish to npm
+        run: npm publish --access public --tag "${{ steps.dist_tag.outputs.tag }}" --provenance
