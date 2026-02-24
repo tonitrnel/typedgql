@@ -445,11 +445,7 @@ export class SelectionWriter extends Writer {
     const childSelectionType = this.selectionTypeNameForType(targetType);
 
     t("\n");
-    if (field.deprecationReason) {
-      t("/**\n * @deprecated ");
-      t(field.deprecationReason);
-      t("\n */\n");
-    }
+    this.writeFieldDocComment(field);
 
     t(field.name);
     this.scope({ type: "generic", multiLines: true }, () => {
@@ -566,13 +562,7 @@ export class SelectionWriter extends Writer {
     const t = this.text.bind(this);
 
     t("\n");
-    if (field.deprecationReason) {
-      t("/**\n");
-      t(" * @deprecated");
-      t(" ");
-      t(field.deprecationReason);
-      t("\n */\n");
-    }
+    this.writeFieldDocComment(field);
     if (renderAsField) {
       t("readonly ");
       t(field.name);
@@ -662,6 +652,34 @@ export class SelectionWriter extends Writer {
       targetTypeOf(field.type) !== undefined ? "X" : undefined,
     );
     t("}");
+  }
+
+  private writeFieldDocComment(field: GraphQLField<unknown, unknown>) {
+    const description = field.description?.trim();
+    const deprecationReason = field.deprecationReason?.trim();
+    if (!description && !deprecationReason) {
+      return;
+    }
+
+    const t = this.text.bind(this);
+    t("/**\n");
+    if (description) {
+      for (const line of this.escapeJsDoc(description).split("\n")) {
+        t(" * ");
+        t(line);
+        t("\n");
+      }
+    }
+    if (deprecationReason) {
+      t(" * @deprecated ");
+      t(this.escapeJsDoc(deprecationReason));
+      t("\n");
+    }
+    t(" */\n");
+  }
+
+  private escapeJsDoc(value: string): string {
+    return value.replaceAll("*/", "*\\/");
   }
 
   private writeInstances() {
