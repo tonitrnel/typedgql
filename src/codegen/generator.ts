@@ -430,6 +430,8 @@ export class Generator {
     // Re-export everything from the generated __generated/index.ts
     // (includes execute, setGraphQLExecutor, ImplementationType, upcastTypes, etc.)
     stream.write(`export * from './__generated/index';\n`);
+    stream.write(`export type { Selection, ExecutableSelection, ObjectSelection, ConnectionSelection, EdgeSelection, ShapeOf, Expand, FieldSelection, DirectiveArgs, EnumInputMetadata, EnumInputMetaType, AcceptableVariables, UnresolvedVariables, SchemaType, SchemaField, SchemaTypeCategory, SchemaFieldCategory, FieldOptions } from './dist/index.mjs';\n`);
+    stream.write(`export { FragmentSpread, StringValue, runtimeOf, createSchemaType, resolveRegisteredSchemaType, registerSchemaTypeFactory, SelectionNode, createSelection, ParameterRef, EnumInputMetadataBuilder, TextBuilder, cyrb53 } from './dist/index.mjs';\n`);
 
     // Import root operation selections for building the gateway object.
     if (queryType instanceof GraphQLObjectType) {
