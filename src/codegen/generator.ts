@@ -353,7 +353,7 @@ export class Generator {
 
   private async writeIndex(schema: GraphQLSchema) {
     const stream = createStream(join(this.targetDir, "index.ts"));
-    stream.write(`export type { GraphQLExecutor, GraphQLSubscriber } from "./client-runtime";\n`);
+    stream.write(`export type { GraphQLExecutor, GraphQLSubscriber, Simplify } from "./client-runtime";\n`);
     stream.write(
       `export { setGraphQLExecutor, setGraphQLSubscriber, execute, subscribe } from "./client-runtime";\n`,
     );
