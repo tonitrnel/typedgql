@@ -1,6 +1,6 @@
 {
   "name": "@ptdgrp/typedgql",
-  "version": "1.0.0-beta.0",
+  "version": "1.0.0-beta.1",
   "description": "Strongly typed GraphQL client code generator and runtime",
   "type": "module",
   "author": "tonitrnel",
