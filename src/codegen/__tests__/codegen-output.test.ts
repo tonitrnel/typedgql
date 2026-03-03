@@ -242,7 +242,7 @@ describe("Codegen output (blog schema)", () => {
         );
         // Interface declaration
         expect(content).toContain("export interface TagSelection<");
-        expect(content).toContain("ObjectSelection<'Tag'");
+        expect(content).toContain("Selection<'Tag'");
 
         // Field accessors
         expect(content).toContain('readonly id: TagSelection<');

@@ -59,7 +59,8 @@
   "scripts": {
     "build": "tsdown",
     "dev": "tsdown --watch",
-    "test": "vitest --run"
+    "test": "vitest --run",
+    "test:coverage": "vitest --run --coverage"
   },
   "peerDependencies": {
     "graphql": ">=15.0.0",
@@ -73,6 +74,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.3.0",
+    "@vitest/coverage-v8": "^4.0.18",
     "fast-check": "^4.5.3",
     "graphql": "^16.0.0",
     "tsdown": "0.20.3",

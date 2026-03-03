@@ -2,15 +2,16 @@
 export type {
   Selection,
   ExecutableSelection,
-  ObjectSelection,
-  ConnectionSelection,
-  EdgeSelection,
   ShapeOf,
   Expand,
   FieldSelection,
   DirectiveArgs,
 } from "./runtime/types";
-export { FragmentSpread, StringValue, runtimeOf } from "./runtime/types";
+export {
+  FragmentSpread,
+  StringValue,
+  runtimeOf,
+} from "./runtime/types";
 
 // ─── Schema metadata ─────────────────────────────────────────────────
 export type {
@@ -34,7 +35,7 @@ export type {
   AcceptableVariables,
   UnresolvedVariables,
 } from "./runtime/parameter";
-export { ParameterRef } from "./runtime/parameter";
+export { ParameterRef, __parameterRefMarker } from "./runtime/parameter";
 export type { FieldOptions } from "./runtime/field-options";
 
 // ─── Enum metadata ───────────────────────────────────────────────────

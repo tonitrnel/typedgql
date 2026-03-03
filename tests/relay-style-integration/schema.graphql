@@ -1,0 +1,34 @@
+type Query {
+  users(first: Int): UserConnection!
+  products(first: Int): ProductConnection!
+}
+
+type UserConnection {
+  totalCount: Int!
+  edges: [UserEdge!]!
+}
+
+type UserEdge {
+  node: User!
+  cursor: String!
+}
+
+type User {
+  id: ID!
+  email: String!
+}
+
+type ProductConnection {
+  totalCount: Int!
+  edges: [ProductEdge!]!
+}
+
+type ProductEdge {
+  node: Product!
+  cursor: String!
+}
+
+type Product {
+  id: ID!
+  name: String!
+}

@@ -1,0 +1,50 @@
+directive @mask(reason: String) on FIELD
+directive @cacheControl(maxAge: Int!) on FIELD | QUERY | MUTATION
+directive @auth(role: Role!) on FIELD | QUERY | MUTATION
+directive @oneOf on INPUT_OBJECT
+
+enum Role {
+  ADMIN
+  USER
+}
+
+input UserFilterInput {
+  nameContains: String
+  role: Role
+  emails: [String!]
+}
+
+input UpdateUserInput {
+  id: ID!
+  name: String
+  role: Role
+}
+
+input UserLookupInput @oneOf {
+  id: ID
+  email: String
+}
+
+type Query {
+  post(id: ID!): Post
+  users(limit: Int): [User!]!
+  searchUsers(filter: UserFilterInput!, tags: [String!], role: Role): [User!]!
+  lookupUser(input: UserLookupInput!): User
+  viewer: User!
+}
+
+type Mutation {
+  updateUser(input: UpdateUserInput!): User!
+}
+
+type Post {
+  id: ID!
+  title: String!
+  author: User!
+}
+
+type User {
+  id: ID!
+  name: String!
+  email: String!
+}

@@ -17,13 +17,17 @@ export interface EnumInputMetaType {
   /** GraphQL 类型名 */
   readonly name: string;
   /** INPUT 类型的字段映射（ENUM 没有字段，为 undefined） */
-  readonly fields?: ReadonlyMap<string, EnumInputMetaType>;
+  readonly fields?: ReadonlyMap<string, EnumInputMetaType | undefined>;
+  /** INPUT 字段的 GraphQL 类型名（保留 []/!） */
+  readonly fieldGraphQLTypeMap?: ReadonlyMap<string, string>;
 }
 
 /** 构建器输入：输入类型的字段描述 */
 export interface RawField {
   readonly name: string;
   readonly typeName: string;
+  readonly graphqlTypeName?: string;
+  readonly isLeaf?: boolean;
 }
 
 /**
@@ -39,6 +43,13 @@ export interface RawField {
  */
 export class EnumInputMetadataBuilder {
   private typeMap = new Map<string, ReadonlyArray<RawField> | undefined>();
+  private static readonly BUILTIN_SCALARS = new Set([
+    "ID",
+    "String",
+    "Int",
+    "Float",
+    "Boolean",
+  ]);
 
   /** 注册一个枚举/输入类型。无 fields 参数表示 ENUM，有则表示 INPUT */
   add(name: string, fields?: ReadonlyArray<RawField>): this {
@@ -58,11 +69,25 @@ export class EnumInputMetadataBuilder {
       }
 
       const rawFields = this.typeMap.get(name);
-      let fields: Map<string, EnumInputMetaType> | undefined;
+      let fields: Map<string, EnumInputMetaType | undefined> | undefined;
+      let fieldGraphQLTypeMap: Map<string, string> | undefined;
       if (rawFields) {
         fields = new Map();
-        for (const { name: fieldName, typeName } of rawFields) {
-          fields.set(fieldName, resolve(typeName));
+        fieldGraphQLTypeMap = new Map();
+        for (const { name: fieldName, typeName, graphqlTypeName, isLeaf } of rawFields) {
+          let resolved: EnumInputMetaType | undefined;
+          const treatAsLeaf =
+            isLeaf || EnumInputMetadataBuilder.BUILTIN_SCALARS.has(typeName);
+          if (!treatAsLeaf) {
+            if (!this.typeMap.has(typeName)) {
+              throw new Error(`Unknown enum/input type: '${typeName}'`);
+            }
+            resolved = resolve(typeName);
+          }
+          fields.set(fieldName, resolved);
+          if (graphqlTypeName) {
+            fieldGraphQLTypeMap.set(fieldName, graphqlTypeName);
+          }
         }
       }
 
@@ -70,6 +95,7 @@ export class EnumInputMetadataBuilder {
         type: rawFields === undefined ? "ENUM" : "INPUT",
         name,
         fields,
+        fieldGraphQLTypeMap,
       };
       result.set(name, metaType);
       return metaType;

@@ -18,8 +18,6 @@ export interface SchemaField {
   readonly category: SchemaFieldCategory;
   readonly argGraphQLTypeMap: ReadonlyMap<string, string>;
   readonly targetTypeName?: string;
-  readonly connectionTypeName?: string;
-  readonly edgeTypeName?: string;
   readonly isPlural: boolean;
   readonly isAssociation: boolean;
   readonly isFunction: boolean;
@@ -71,8 +69,6 @@ type FieldDescriptor =
     readonly undefinable?: boolean;
     readonly argGraphQLTypeMap?: { readonly [key: string]: string };
     readonly targetTypeName?: string;
-    readonly connectionTypeName?: string;
-    readonly edgeTypeName?: string;
   };
 
 // ─── Factory ────────────────────────────────────────────────────────
@@ -97,7 +93,7 @@ export function createSchemaType<E extends string>(
       }
       declaredFieldMap.set(
         desc.name,
-        buildField(desc.name, desc.category, argMap, desc.targetTypeName, desc.connectionTypeName, desc.edgeTypeName, desc.undefinable),
+        buildField(desc.name, desc.category, argMap, desc.targetTypeName, desc.undefinable),
       );
     }
   }
@@ -133,8 +129,6 @@ function buildField(
   category: SchemaFieldCategory,
   argGraphQLTypeMap: ReadonlyMap<string, string>,
   targetTypeName?: string,
-  connectionTypeName?: string,
-  edgeTypeName?: string,
   undefinable?: boolean,
 ): SchemaField {
   const isPlural = category === "LIST" || category === "CONNECTION";
@@ -145,8 +139,6 @@ function buildField(
     category,
     argGraphQLTypeMap,
     targetTypeName,
-    connectionTypeName,
-    edgeTypeName,
     isPlural,
     isAssociation,
     isFunction: argGraphQLTypeMap.size !== 0 || isAssociation || targetTypeName !== undefined,

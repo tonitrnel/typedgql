@@ -72,14 +72,6 @@ export class FieldOptions<
 
     return { alias, directives };
   }
-
-  " $supressWarnings"(
-    _alias: TAlias,
-    _directives: TDirectives,
-    _directiveVariables: TDirectiveVariables,
-  ): void {
-    throw new Error('" $supressWarnings" is unsupported');
-  }
 }
 
 export function createFieldOptions<TAlias extends string>(): FieldOptions<

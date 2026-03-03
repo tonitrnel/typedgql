@@ -49,7 +49,10 @@ export class EnumInputMetadataWriter extends Writer {
           for (const field of fields) {
             this.separator(", ");
             this.scope({ type: "block" }, () => {
-              this.text(`name: "${field.name}", typeName: "${EnumInputMetadataWriter.inputTypeName(field.type)}"`);
+              this.text(`name: "${field.name}", typeName: "${EnumInputMetadataWriter.inputTypeName(field.type)}", graphqlTypeName: "${EnumInputMetadataWriter.graphqlTypeName(field.type)}"`);
+              if (EnumInputMetadataWriter.isLeafInputType(field.type)) {
+                this.text(", isLeaf: true");
+              }
             });
           }
         });
@@ -92,12 +95,8 @@ export class EnumInputMetadataWriter extends Writer {
     const fieldMap = type.getFields();
     const fields: GraphQLInputField[] = [];
     for (const field of Object.values(fieldMap)) {
-      if (this.collectEnumMetaTypes(field.type, processedTypeNames, outMap)) {
-        fields.push(field);
-      }
-    }
-    if (fields.length === 0) {
-      return false;
+      this.collectEnumMetaTypes(field.type, processedTypeNames, outMap);
+      fields.push(field);
     }
     outMap.set(type.name, fields);
     return true;
@@ -113,5 +112,24 @@ export class EnumInputMetadataWriter extends Writer {
     return (
       type as GraphQLEnumType | GraphQLInputObjectType | GraphQLScalarType
     ).name;
+  }
+
+  private static graphqlTypeName(type: GraphQLInputType): string {
+    if (type instanceof GraphQLList) {
+      return `[${EnumInputMetadataWriter.graphqlTypeName(type.ofType)}]`;
+    }
+    if (type instanceof GraphQLNonNull) {
+      return `${EnumInputMetadataWriter.graphqlTypeName(type.ofType)}!`;
+    }
+    return (
+      type as GraphQLEnumType | GraphQLInputObjectType | GraphQLScalarType
+    ).name;
+  }
+
+  private static isLeafInputType(type: GraphQLInputType): boolean {
+    if (type instanceof GraphQLList || type instanceof GraphQLNonNull) {
+      return EnumInputMetadataWriter.isLeafInputType(type.ofType);
+    }
+    return type instanceof GraphQLScalarType;
   }
 }

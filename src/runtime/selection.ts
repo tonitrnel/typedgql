@@ -10,7 +10,7 @@ import type {
   DirectiveArgs,
 } from "./types";
 import { StringValue } from "./types";
-import { ParameterRef } from "./parameter";
+import { ParameterRef, __parameterRefMarker } from "./parameter";
 import { TextBuilder } from "./text-builder";
 
 // ─── SelectionImpl ─────────────────────────────────────────────────────
@@ -182,10 +182,6 @@ export class SelectionImpl<
     return JSON.stringify(this._serialize());
   }
 
-  " $supressWarnings"(_: T, _2: TVariables): never {
-    throw new Error("' $supressWarnings' is not supported");
-  }
-
   // ═══════════════════════════════════════════════════════════════════
   // Private implementation
   // ═══════════════════════════════════════════════════════════════════
@@ -198,7 +194,8 @@ export class SelectionImpl<
     }
 
     const map = new Map<string, FieldSelection>();
-    // Process oldest → newest
+    // Process oldest → newest so later operations can override earlier ones
+    // (for example alias rewrites and field removals).
     for (let i = nodes.length - 1; i >= 0; --i) {
       const n = nodes[i]!;
       const key = n._fieldOptionsValue?.alias ?? n._field;
@@ -328,8 +325,10 @@ class SerializeContext {
       const children = field.childSelections;
       if (children?.length) {
         if (name === "...") {
+          // Inline spread: flatten children directly into current selection.
           for (const c of children) this.acceptSelection(c);
         } else if (name.startsWith("...") && !name.startsWith("... on ")) {
+          // Named spread: defer full body emission to fragment writer.
           const fragName = name.substring("...".length).trim();
           const old = this.namedFragmentMap.get(fragName);
           for (const c of children) {
@@ -385,42 +384,32 @@ class SerializeContext {
             if (argGraphQLTypeMap) {
               const typeName = argGraphQLTypeMap.get(argName);
               if (typeName !== undefined) {
-                if (arg[" $__instanceOfParameterRef"]) {
+                if (arg?.[__parameterRefMarker]) {
                   const ref = arg as ParameterRef<string>;
-                  if (ref.graphqlTypeName && ref.graphqlTypeName !== typeName) {
-                    throw new Error(
-                      `Argument '${ref.name}' type conflict: '${typeName}' vs ParameterRef '${ref.graphqlTypeName}'`,
-                    );
-                  }
-                  const existing = this.variableTypeMap.get(ref.name);
-                  if (existing && existing !== typeName) {
-                    throw new Error(
-                      `Argument '${ref.name}' type conflict: '${existing}' vs '${typeName}'`,
-                    );
-                  }
-                  this.variableTypeMap.set(ref.name, typeName);
+                  this.registerVariableType(ref, typeName, false, "field argument");
                   t(`${argName}: $${ref.name}`);
                 } else {
                   t(`${argName}: `);
                   this.acceptLiteral(
                     arg,
                     SerializeContext.enumMetaType(enumInputMetadata, typeName),
+                    typeName,
                   );
                 }
               } else {
                 throw new Error(`Unknown argument '${argName}'`);
               }
             } else {
-              if (arg[" $__instanceOfParameterRef"]) {
+              if (arg?.[__parameterRefMarker]) {
                 const ref = arg as ParameterRef<string>;
                 if (!ref.graphqlTypeName) {
                   throw new Error(`Directive argument '${ref.name}' requires graphqlTypeName`);
                 }
-                this.variableTypeMap.set(ref.name, ref.graphqlTypeName);
+                this.registerVariableType(ref, ref.graphqlTypeName, false, "directive argument");
                 t(`${argName}: $${ref.name}`);
               } else {
                 t(`${argName}: `);
-                this.acceptLiteral(arg, undefined);
+                this.acceptLiteral(arg, undefined, undefined);
               }
             }
           }
@@ -429,23 +418,39 @@ class SerializeContext {
     }
   }
 
-  private acceptLiteral(value: any, metaType: EnumInputMetaType | undefined) {
+  private acceptLiteral(
+    value: any,
+    metaType: EnumInputMetaType | undefined,
+    graphqlTypeName: string | undefined,
+  ) {
     const t = this.writer.text.bind(this.writer);
 
     if (value == null) { t("null"); return; }
     if (typeof value === "number") { t(value.toString()); return; }
     if (typeof value === "string") { t(metaType ? value : JSON.stringify(value)); return; }
     if (typeof value === "boolean") { t(value ? "true" : "false"); return; }
+    if (value?.[__parameterRefMarker]) {
+      const ref = value as ParameterRef<string>;
+      if (!graphqlTypeName && !ref.graphqlTypeName) {
+        throw new Error(
+          `Argument '${ref.name}' nested type cannot be inferred; provide graphqlTypeName`,
+        );
+      }
+      this.registerVariableType(ref, graphqlTypeName, true, "nested argument");
+      t(`$${ref.name}`);
+      return;
+    }
     if (value instanceof StringValue) {
       t(value.quotationMarks ? JSON.stringify(value.value) : value.value);
       return;
     }
 
     if (Array.isArray(value) || value instanceof Set) {
+      const elementGraphQLTypeName = SerializeContext.elementTypeName(graphqlTypeName);
       this.writer.scope({ type: "array" }, () => {
         for (const e of value) {
           this.writer.separator(", ");
-          this.acceptLiteral(e, metaType);
+          this.acceptLiteral(e, metaType, elementGraphQLTypeName);
         }
       });
     } else if (value instanceof Map) {
@@ -454,7 +459,11 @@ class SerializeContext {
           this.writer.separator(", ");
           this.writer.text(k);
           t(": ");
-          this.acceptLiteral(v, metaType?.fields?.get(k));
+          this.acceptLiteral(
+            v,
+            metaType?.fields?.get(k),
+            metaType?.fieldGraphQLTypeMap?.get(k),
+          );
         }
       });
     } else if (typeof value === "object") {
@@ -463,10 +472,38 @@ class SerializeContext {
           this.writer.separator(", ");
           this.writer.text(k);
           t(": ");
-          this.acceptLiteral(value[k], metaType?.fields?.get(k));
+          this.acceptLiteral(
+            value[k],
+            metaType?.fields?.get(k),
+            metaType?.fieldGraphQLTypeMap?.get(k),
+          );
         }
       });
     }
+  }
+
+  private registerVariableType(
+    ref: ParameterRef<string>,
+    expectedTypeName: string | undefined,
+    allowImplicitFromRef = false,
+    context = "argument",
+  ) {
+    const typeName = expectedTypeName ?? (allowImplicitFromRef ? ref.graphqlTypeName : undefined);
+    if (!typeName) {
+      throw new Error(`Directive argument '${ref.name}' requires graphqlTypeName`);
+    }
+    if (ref.graphqlTypeName && ref.graphqlTypeName !== typeName) {
+      throw new Error(
+        `Argument '${ref.name}' type conflict: '${typeName}' vs ParameterRef '${ref.graphqlTypeName}' (${context})`,
+      );
+    }
+    const existing = this.variableTypeMap.get(ref.name);
+    if (existing && existing !== typeName) {
+      throw new Error(
+        `Argument '${ref.name}' type conflict: '${existing}' vs '${typeName}' (${context})`,
+      );
+    }
+    this.variableTypeMap.set(ref.name, typeName);
   }
 
   private static enumMetaType(
@@ -476,19 +513,32 @@ class SerializeContext {
     if (!meta || !typeName) return undefined;
     return meta.get(typeName.split(/\[|\]|!/).join(""));
   }
+
+  private static elementTypeName(typeName: string | undefined): string | undefined {
+    if (!typeName) return undefined;
+    let normalized = typeName.trim();
+    // Strip non-null marker before list extraction to get element type.
+    if (normalized.endsWith("!")) {
+      normalized = normalized.slice(0, -1).trim();
+    }
+    if (normalized.startsWith("[") && normalized.endsWith("]")) {
+      return normalized.slice(1, -1).trim();
+    }
+    return normalized;
+  }
 }
 
 function isMultiLineJSON(obj: any): boolean {
   let size = 0;
   if (Array.isArray(obj)) {
     for (const v of obj) {
-      if (typeof v === "object" && !v[" $__instanceOfParameterRef"]) return true;
+      if (typeof v === "object" && !v?.[__parameterRefMarker]) return true;
       if (++size > 2) return true;
     }
   } else if (typeof obj === "object") {
     for (const k in obj) {
       const v = obj[k];
-      if (typeof v === "object" && !v[" $__instanceOfParameterRef"]) return true;
+      if (typeof v === "object" && !v?.[__parameterRefMarker]) return true;
       if (++size > 2) return true;
     }
   }

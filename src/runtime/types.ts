@@ -48,43 +48,12 @@ export function runtimeOf<
   return (selection as ExecutableSelection<E, T, TVariables>)[__selectionRuntime];
 }
 
-// Category-branded subtypes
-export interface ObjectSelection<
-  E extends string,
-  T extends object,
-  TVariables extends object,
-> extends Selection<E, T, TVariables> {
-  readonly " $category": "OBJECT";
-}
-
-export interface ConnectionSelection<
-  E extends string,
-  T extends object,
-  TVariables extends object,
-> extends Selection<E, T, TVariables> {
-  readonly " $category": "CONNECTION";
-}
-
-export interface EdgeSelection<
-  E extends string,
-  T extends object,
-  TVariables extends object,
-> extends Selection<E, T, TVariables> {
-  readonly " $category": "EDGE";
-}
-
 // ─── Utility Types ────────────────────────────────────────────────────
 
 export type ShapeOf<F> =
   F extends Selection<string, infer M, object>
     ? M
-    : F extends ObjectSelection<string, infer M, object>
-      ? M
-      : F extends ConnectionSelection<string, infer M, object>
-        ? M
-        : F extends EdgeSelection<string, infer M, object>
-          ? M
-          : never;
+    : never;
 
 export type Expand<T> =
   T extends ReadonlyArray<infer U>

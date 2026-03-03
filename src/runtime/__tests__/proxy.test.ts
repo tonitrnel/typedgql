@@ -280,4 +280,320 @@ describe("关联字段回调选择", () => {
         const nameFieldSkip = withSkip.fieldMap.get("name");
         expect(nameFieldSkip?.fieldOptionsValue?.directives.has("skip")).toBe(true);
     });
+
+    it("field-level directives are appended by name and preserve existing args/child", () => {
+        const userType = makeType("DirUser", ["id", "name"]);
+        const queryType = createSchemaType(
+            "DirQuery",
+            "OBJECT",
+            [],
+            [
+                {
+                    name: "user",
+                    category: "REFERENCE",
+                    targetTypeName: "DirUser",
+                    argGraphQLTypeMap: { id: "ID!" },
+                },
+            ],
+        );
+        const selection = createSelection<string, Selection<string, object, object>>(
+            queryType,
+            enumInputMetadata,
+            undefined,
+        );
+
+        const result = (selection as any)
+            .user({ id: "u1" }, (u: any) => u.id.name)
+            .$directive("cacheControl", { maxAge: 60 })
+            .$directive("auth", { role: "ADMIN" });
+
+        const userField = result.fieldMap.get("user");
+        expect(userField?.args).toEqual({ id: "u1" });
+        const childMap = userField?.childSelections?.[0]?.fieldMap;
+        expect(childMap?.has("id")).toBe(true);
+        expect(childMap?.has("name")).toBe(true);
+        expect(userField?.fieldOptionsValue?.directives.get("cacheControl")).toEqual({ maxAge: 60 });
+        expect(userField?.fieldOptionsValue?.directives.get("auth")).toEqual({ role: "ADMIN" });
+    });
+
+    it("$include/$skip apply to selection when there is no preceding field", () => {
+        const selection = createSelection<string, Selection<string, object, object>>(
+            makeType("RootIncludeSkip", ["id"]),
+            enumInputMetadata,
+            undefined,
+        );
+
+        const withInclude = (selection as any).$include(true);
+        expect(withInclude.directiveMap.get("include")).toEqual({ if: true });
+
+        const withSkip = (selection as any).$skip(false);
+        expect(withSkip.directiveMap.get("skip")).toEqual({ if: false });
+    });
+
+    it("$alias throws without a preceding field", () => {
+        const selection = createSelection<string, Selection<string, object, object>>(
+            makeType("RootAliasError", ["id"]),
+            enumInputMetadata,
+            undefined,
+        );
+
+        expect(() => (selection as any).$alias("x")).toThrow(
+            "$alias requires a preceding field selection",
+        );
+    });
+
+    it("$alias works even when the last field was removed", () => {
+        const selection = createSelection<string, Selection<string, object, object>>(
+            makeType("RootAliasAfterOmit", ["id", "name"]),
+            enumInputMetadata,
+            undefined,
+        );
+
+        const result = (selection as any).id.$omit("id").$alias("idAlias");
+        const idAliasField = result.fieldMap.get("idAlias");
+        expect(idAliasField?.name).toBe("id");
+        expect(idAliasField?.fieldOptionsValue?.alias).toBe("idAlias");
+    });
+
+    it("scalar fields with args use method handler and support options callback", () => {
+        const queryType = createSchemaType(
+            "RootMethod",
+            "OBJECT",
+            [],
+            [
+                {
+                    name: "search",
+                    category: "SCALAR",
+                    argGraphQLTypeMap: { q: "String!", limit: "Int" },
+                },
+            ],
+        );
+        const selection = createSelection<string, Selection<string, object, object>>(
+            queryType,
+            enumInputMetadata,
+            undefined,
+        );
+
+        const withAutoArgs = (selection as any).search();
+        expect(withAutoArgs.toString()).toContain("search(q: $q)");
+
+        const withOptions = (selection as any).search(
+            { q: "abc", limit: 1 },
+            (opts: any) => opts.alias("quickSearch").directive("include", { if: true }),
+        );
+        const field = withOptions.fieldMap.get("quickSearch");
+        expect(field?.name).toBe("search");
+        expect(field?.fieldOptionsValue?.directives.get("include")).toEqual({ if: true });
+    });
+
+    it("regular method call accepts SelectionImpl argument as child", () => {
+        const childType = makeType("MethodChild", ["id"]);
+        const queryType = createSchemaType(
+            "RootMethodChild",
+            "OBJECT",
+            [],
+            [
+                {
+                    name: "compute",
+                    category: "SCALAR",
+                    argGraphQLTypeMap: { q: "String!" },
+                },
+            ],
+        );
+        const selection = createSelection<string, Selection<string, object, object>>(
+            queryType,
+            enumInputMetadata,
+            undefined,
+        );
+        const childSelection = createSelection<string, Selection<string, object, object>>(
+            childType,
+            enumInputMetadata,
+            undefined,
+        );
+
+        const result = (selection as any).compute(
+            { q: "x" },
+            (childSelection as any).id,
+        );
+        const computeField = result.fieldMap.get("compute");
+        expect(computeField?.childSelections?.[0]?.fieldMap.has("id")).toBe(true);
+    });
+
+    it("association fields fail fast when target type is invalid", () => {
+        const missingTargetType = createSchemaType(
+            "RootMissingTarget",
+            "OBJECT",
+            [],
+            [{ name: "badRef", category: "REFERENCE" }],
+        );
+        const missingTargetSelection = createSelection<string, Selection<string, object, object>>(
+            missingTargetType,
+            enumInputMetadata,
+            undefined,
+        );
+        expect(() => (missingTargetSelection as any).badRef((x: any) => x.id)).toThrow(
+            'Field "badRef" has no target type',
+        );
+
+        const unresolvedTargetType = createSchemaType(
+            "RootUnresolvedTarget",
+            "OBJECT",
+            [],
+            [
+                {
+                    name: "badRef",
+                    category: "REFERENCE",
+                    targetTypeName: "NeverRegisteredType",
+                },
+            ],
+        );
+        const unresolvedTargetSelection = createSelection<string, Selection<string, object, object>>(
+            unresolvedTargetType,
+            enumInputMetadata,
+            undefined,
+        );
+        expect(() => (unresolvedTargetSelection as any).badRef((x: any) => x.id)).toThrow(
+            'Cannot resolve schema type "NeverRegisteredType" for field "badRef" on "RootUnresolvedTarget"',
+        );
+    });
+
+    it("association field requires child selection", () => {
+        makeType("AssocChild", ["id"]);
+        const queryType = createSchemaType(
+            "AssocRequireChildRoot",
+            "OBJECT",
+            [],
+            [
+                {
+                    name: "child",
+                    category: "REFERENCE",
+                    targetTypeName: "AssocChild",
+                },
+            ],
+        );
+        const selection = createSelection<string, Selection<string, object, object>>(
+            queryType,
+            enumInputMetadata,
+            undefined,
+        );
+
+        expect(() => (selection as any).child()).toThrow(
+            'Field "child" requires a child selection',
+        );
+    });
+
+    it("association field accepts direct SelectionImpl child", () => {
+        const childType = makeType("AssocDirectChild", ["id", "name"]);
+        const queryType = createSchemaType(
+            "AssocDirectRoot",
+            "OBJECT",
+            [],
+            [
+                {
+                    name: "child",
+                    category: "REFERENCE",
+                    targetTypeName: "AssocDirectChild",
+                },
+            ],
+        );
+        const selection = createSelection<string, Selection<string, object, object>>(
+            queryType,
+            enumInputMetadata,
+            undefined,
+        );
+        const childSelection = createSelection<string, Selection<string, object, object>>(
+            childType,
+            enumInputMetadata,
+            undefined,
+        );
+
+        const result = (selection as any).child((childSelection as any).id.name);
+        const childField = result.fieldMap.get("child");
+        expect(childField?.childSelections?.[0]?.fieldMap.has("id")).toBe(true);
+        expect(childField?.childSelections?.[0]?.fieldMap.has("name")).toBe(true);
+    });
+
+    it("proxy exposes schemaType via property access", () => {
+        const rootType = makeType("SchemaTypeAccessRoot", ["id"]);
+        const selection = createSelection<string, Selection<string, object, object>>(
+            rootType,
+            enumInputMetadata,
+            undefined,
+        );
+
+        expect((selection as any).schemaType.name).toBe("SchemaTypeAccessRoot");
+    });
+
+    it("$omit ignores non-string arguments", () => {
+        const selection = createSelection<string, Selection<string, object, object>>(
+            makeType("RootOmitNonString", ["id", "name"]),
+            enumInputMetadata,
+            undefined,
+        );
+
+        const result = (selection as any).id.name.$omit(123, { bad: true }, "id");
+        expect(result.fieldMap.has("id")).toBe(false);
+        expect(result.fieldMap.has("name")).toBe(true);
+    });
+
+    it("$directive after omitting the last field still rewrites field options", () => {
+        const selection = createSelection<string, Selection<string, object, object>>(
+            makeType("RootDirectiveAfterOmit", ["id"]),
+            enumInputMetadata,
+            undefined,
+        );
+
+        const result = (selection as any).id.$omit("id").$directive("include", { if: true });
+        const idField = result.fieldMap.get("id");
+        expect(idField?.name).toBe("id");
+        expect(idField?.fieldOptionsValue?.directives.get("include")).toEqual({ if: true });
+    });
+
+    it("inherited function field does not auto-infer required args from ownFields", () => {
+        const baseType = createSchemaType(
+            "ProxyBaseFunctionType",
+            "OBJECT",
+            [],
+            [
+                {
+                    name: "search",
+                    category: "SCALAR",
+                    argGraphQLTypeMap: { q: "String!" },
+                },
+            ],
+        );
+        const childType = createSchemaType(
+            "ProxyChildFunctionType",
+            "OBJECT",
+            [baseType],
+            ["id"],
+        );
+        const selection = createSelection<string, Selection<string, object, object>>(
+            childType,
+            enumInputMetadata,
+            undefined,
+        );
+
+        const result = (selection as any).search();
+        expect(result.toString()).toContain("search");
+        expect(result.toString()).not.toContain("q: $q");
+    });
+
+    it("$on with direct selection does not force __typename when schema type is same", () => {
+        const nodeType = makeType("SameNode", ["id", "name"]);
+        const parentSelection = createSelection<string, Selection<string, object, object>>(
+            nodeType,
+            enumInputMetadata,
+            undefined,
+        );
+        const childSelection = createSelection<string, Selection<string, object, object>>(
+            nodeType,
+            enumInputMetadata,
+            undefined,
+        );
+
+        const result = (parentSelection as any).$on((childSelection as any).id);
+        expect(result.fieldMap.has("__typename")).toBe(false);
+        expect(result.fieldMap.has("...")).toBe(true);
+    });
 });

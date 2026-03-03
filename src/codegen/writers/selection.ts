@@ -809,16 +809,7 @@ export class SelectionWriter extends Writer {
       }
       if (targetType !== undefined) {
         this.separator(", ");
-        const connection = this.ctx.connections.get(targetType);
-        if (connection !== undefined) {
-          t(`connectionTypeName: "${targetType.name}"`);
-          this.separator(", ");
-          t(`edgeTypeName: "${connection.edgeType.name}"`);
-          this.separator(", ");
-          t(`targetTypeName: "${connection.nodeType.name}"`);
-        } else {
-          t(`targetTypeName: "${targetType.name}"`);
-        }
+        t(`targetTypeName: "${targetType.name}"`);
       }
       if (!(field.type instanceof GraphQLNonNull)) {
         this.separator(", ");
@@ -926,15 +917,9 @@ export class SelectionWriter extends Writer {
   }
 
   private superSelectionTypeName(
-    graphQLType: GraphQLObjectType | GraphQLInterfaceType | GraphQLUnionType,
+    _graphQLType: GraphQLObjectType | GraphQLInterfaceType | GraphQLUnionType,
   ): string {
-    if (this.ctx.connections.has(graphQLType)) {
-      return "ConnectionSelection";
-    }
-    if (this.ctx.edgeTypes.has(graphQLType)) {
-      return "EdgeSelection";
-    }
-    return "ObjectSelection";
+    return "Selection";
   }
 
   private selectionTypeNameForType(
