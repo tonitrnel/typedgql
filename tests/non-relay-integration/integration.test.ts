@@ -4,6 +4,7 @@ import { join } from "path";
 import { pathToFileURL } from "url";
 import { Generator } from "../../src/codegen/generator";
 import { loadLocalSchema } from "../../src/codegen/schema-loader";
+import { rewriteGeneratedImportsToSrcEntry } from "../helpers/rewrite-generated-imports";
 
 const SCHEMA_FILE = join(
   process.cwd(),
@@ -31,6 +32,7 @@ describe("Runtime + codegen integration (non-relay)", () => {
       targetDir: GENERATED_DIR,
     });
     await generator.generate();
+    await rewriteGeneratedImportsToSrcEntry(GENERATED_DIR);
   });
 
   afterAll(async () => {

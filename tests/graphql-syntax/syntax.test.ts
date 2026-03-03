@@ -5,7 +5,8 @@ import { join } from "path";
 import { pathToFileURL } from "url";
 import { Generator } from "../../src/codegen/generator";
 import { loadLocalSchema } from "../../src/codegen/schema-loader";
-import { ParameterRef } from "../../dist/index.mjs";
+import { ParameterRef } from "../../src/index";
+import { rewriteGeneratedImportsToSrcEntry } from "../helpers/rewrite-generated-imports";
 
 const SCHEMA_FILE = join(process.cwd(), "tests", "graphql-syntax", "schema.graphql");
 const GENERATED_DIR = join(process.cwd(), "__generated-graphql-syntax-test");
@@ -38,6 +39,7 @@ describe("GraphQL syntax generation (from codegen output)", () => {
       targetDir: GENERATED_DIR,
     });
     await generator.generate();
+    await rewriteGeneratedImportsToSrcEntry(GENERATED_DIR);
   });
 
   afterAll(async () => {
