@@ -125,6 +125,7 @@ describe("Writer", () => {
       options({
         scalarTypeMap: {
           Decimal: { typeName: "Decimal", importSource: "shared/scalars" },
+          Big: { typeName: "Big", importSource: "shared/scalars" },
         },
       }),
       {
@@ -134,6 +135,7 @@ describe("Writer", () => {
           w.addType(TestInput);
           w.addType(TestEnum);
           w.addType(new GraphQLScalarType({ name: "Decimal" }));
+          w.addType(new GraphQLScalarType({ name: "Big" }));
         },
         code: (w) => {
           w.out("export const ok = true;\n");
@@ -147,8 +149,15 @@ describe("Writer", () => {
     expect(text).toContain("import { a } from 'alpha';");
     expect(text).toContain("import type {TestInput} from '../inputs';");
     expect(text).toContain("import type {TestEnum} from '../enums';");
-    expect(text).toContain("import type { Decimal } from '../../shared/scalars';");
+    expect(text).toContain("import type { Big, Decimal } from '../../shared/scalars';");
     expect(text).toContain("\nexport const ok = true;\n");
+
+    expect(text.indexOf("import { a } from 'alpha';")).toBeLessThan(
+      text.indexOf("import { z } from 'zlib';"),
+    );
+    expect(text.indexOf("import type {TestEnum} from '../enums';")).toBeLessThan(
+      text.indexOf("import type {TestInput} from '../inputs';"),
+    );
   });
 
   it("supports global-dir import paths and skips self imports", () => {

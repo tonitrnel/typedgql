@@ -144,7 +144,7 @@ export class SelectionImpl<
     for (const [, f] of this.fieldMap) {
       if (f.name.startsWith("...") && f.childSelections) {
         for (const child of f.childSelections) {
-          const deeper = child.findField(fieldKey);
+          const deeper = runtimeOf(child).findField(fieldKey);
           if (deeper) return deeper;
         }
       }
@@ -239,7 +239,7 @@ export class SelectionImpl<
         out.push(field);
       } else if (field.name.startsWith("...") && field.childSelections) {
         for (const child of field.childSelections) {
-          out.push(...child.findFieldsByName(fieldName));
+          out.push(...runtimeOf(child).findFieldsByName(fieldName));
         }
       }
     }
@@ -279,8 +279,9 @@ function serialize(root: SelectionImpl<string, object, object>): SerializedResul
     ctx = new SerializeContext(fragmentWriter, ctx);
     for (const [name, fragment] of fragmentMap) {
       if (renderedFragments.add(name)) {
-        fragmentWriter.text(`fragment ${name} on ${fragment.schemaType.name} `);
-        ctx.acceptDirectives(fragment.directiveMap);
+        const runtime = runtimeOf(fragment);
+        fragmentWriter.text(`fragment ${name} on ${runtime.schemaType.name} `);
+        ctx.acceptDirectives(runtime.directiveMap);
         fragmentWriter.scope({ type: "block", multiLines: true, suffix: "\n" }, () => {
           ctx.acceptSelection(fragment);
         });

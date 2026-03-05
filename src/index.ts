@@ -3,15 +3,12 @@ export type {
   Selection,
   ExecutableSelection,
   ShapeOf,
+  VariablesOf,
   Expand,
   FieldSelection,
   DirectiveArgs,
 } from "./runtime/types";
-export {
-  FragmentSpread,
-  StringValue,
-  runtimeOf,
-} from "./runtime/types";
+export { FragmentSpread, StringValue, runtimeOf } from "./runtime/types";
 
 // ─── Schema metadata ─────────────────────────────────────────────────
 export type {

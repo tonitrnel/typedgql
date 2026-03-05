@@ -42,18 +42,19 @@ export function runtimeOf<
   E extends string,
   T extends object,
   TVariables extends object,
->(
-  selection: Selection<E, T, TVariables>,
-): SelectionRuntime<E> {
-  return (selection as ExecutableSelection<E, T, TVariables>)[__selectionRuntime];
+>(selection: Selection<E, T, TVariables>): SelectionRuntime<E> {
+  return (selection as ExecutableSelection<E, T, TVariables>)[
+    __selectionRuntime
+  ];
 }
 
 // ─── Utility Types ────────────────────────────────────────────────────
 
 export type ShapeOf<F> =
-  F extends Selection<string, infer M, object>
-    ? M
-    : never;
+  F extends Selection<string, infer M, object> ? M : never;
+
+export type VariablesOf<T> =
+  T extends Selection<string, object, infer TVariables> ? TVariables : never;
 
 export type Expand<T> =
   T extends ReadonlyArray<infer U>
@@ -70,7 +71,9 @@ export interface FieldSelection {
   readonly args?: object;
   readonly fieldOptionsValue?: FieldOptionsValue;
   readonly plural: boolean;
-  readonly childSelections?: ReadonlyArray<ExecutableSelection<string, object, object>>;
+  readonly childSelections?: ReadonlyArray<
+    ExecutableSelection<string, object, object>
+  >;
 }
 
 // ─── Directives & Fragments ──────────────────────────────────────────

@@ -290,4 +290,17 @@ describe("Selection 接口生成正确性", () => {
     expect(writer.behavior(sameDirType)).toBe("same_dir");
     expect(writer.behavior(otherDirType)).toBe("other_dir");
   });
+
+  it("does not emit unused runtime type imports", () => {
+    const modelType = makeScalarType("NoUnusedImportType", ["id"]);
+    const schema = new GraphQLSchema({ query: modelType });
+    const ctx = makeCtx(schema);
+    const { stream, getOutput } = makeStream();
+
+    const writer = new SelectionWriter(modelType, ctx, stream, baseOptions);
+    writer.write();
+    const output = getOutput();
+
+    expect(output).not.toContain("FieldOptions");
+  });
 });

@@ -11,6 +11,11 @@ import {
 } from "graphql";
 import { CodegenOptions } from "../options";
 import { Writer } from "../writer";
+import {
+  CODEGEN_IMPORT_SOURCE_MAP,
+  EnumInputMetadataWriterImportSymbol,
+  JSImportCollector,
+} from "../imports";
 
 export class EnumInputMetadataWriter extends Writer {
   constructor(
@@ -22,9 +27,12 @@ export class EnumInputMetadataWriter extends Writer {
   }
 
   protected prepareImports() {
-    this.importStatement(
-      "import { EnumInputMetadataBuilder } from '../dist/index.mjs';",
+    const imports = new JSImportCollector<EnumInputMetadataWriterImportSymbol>(
+      (stmt) => this.importStatement(stmt),
+      CODEGEN_IMPORT_SOURCE_MAP,
     );
+    imports.useMapped("EnumInputMetadataBuilder");
+    imports.emit();
   }
 
   protected writeCode() {

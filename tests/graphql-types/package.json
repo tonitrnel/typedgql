@@ -1,0 +1,11 @@
+{
+  "name": "graphql-types-tests",
+  "private": true,
+  "types": "./typings.d.ts",
+  "tsd": {
+    "compilerOptions": {
+      "strict": true,
+      "rootDir": "../.."
+    }
+  }
+}

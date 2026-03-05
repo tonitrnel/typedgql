@@ -20,83 +20,13 @@ import {
 import { CodegenOptions } from "../options";
 import { ImportingBehavior, Writer } from "../writer";
 import { SelectionContext } from "../selection-context";
+import {
+  CODEGEN_IMPORT_SOURCE_MAP,
+  JSImportCollector,
+  SelectionImportSymbol,
+} from "../imports";
 
 type FieldCategory = "SCALAR" | "LIST" | "REFERENCE" | "ID";
-
-type ImportKind = "type" | "value";
-
-interface ImportSpec {
-  readonly source: string;
-  readonly kind: ImportKind;
-}
-
-const IMPORT_SOURCE_MAP: Record<string, ImportSpec> = {
-  AcceptableVariables: { source: "../../dist/index.mjs", kind: "type" },
-  UnresolvedVariables: { source: "../../dist/index.mjs", kind: "type" },
-  FieldOptions: { source: "../../dist/index.mjs", kind: "type" },
-  DirectiveArgs: { source: "../../dist/index.mjs", kind: "type" },
-  Selection: { source: "../../dist/index.mjs", kind: "type" },
-  createSelection: { source: "../../dist/index.mjs", kind: "value" },
-  createSchemaType: { source: "../../dist/index.mjs", kind: "value" },
-  registerSchemaTypeFactory: { source: "../../dist/index.mjs", kind: "value" },
-  resolveRegisteredSchemaType: { source: "../../dist/index.mjs", kind: "value" },
-  ENUM_INPUT_METADATA: { source: "../enum-input-metadata", kind: "value" },
-  WithTypeName: { source: "../type-hierarchy", kind: "type" },
-  ImplementationType: { source: "../type-hierarchy", kind: "type" },
-};
-
-class ImportCollector {
-  private typeBySource = new Map<string, Set<string>>();
-  private valueBySource = new Map<string, Set<string>>();
-  private sideEffects = new Set<string>();
-
-  constructor(private readonly sink: (stmt: string) => void) {}
-
-  useMapped(symbol: keyof typeof IMPORT_SOURCE_MAP): void {
-    const spec = IMPORT_SOURCE_MAP[symbol];
-    if (spec.kind === "type") {
-      this.useType(spec.source, symbol);
-    } else {
-      this.useValue(spec.source, symbol);
-    }
-  }
-
-  useType(source: string, symbol: string): void {
-    this.collect(this.typeBySource, source, symbol);
-  }
-
-  useValue(source: string, symbol: string): void {
-    this.collect(this.valueBySource, source, symbol);
-  }
-
-  useSideEffect(source: string): void {
-    this.sideEffects.add(source);
-  }
-
-  emit(): void {
-    for (const [source, symbols] of this.sorted(this.typeBySource)) {
-      this.sink(`import type { ${Array.from(symbols).sort().join(", ")} } from '${source}';`);
-    }
-    for (const [source, symbols] of this.sorted(this.valueBySource)) {
-      this.sink(`import { ${Array.from(symbols).sort().join(", ")} } from '${source}';`);
-    }
-    for (const source of Array.from(this.sideEffects).sort()) {
-      this.sink(`import '${source}';`);
-    }
-  }
-
-  private collect(map: Map<string, Set<string>>, source: string, symbol: string): void {
-    const set = map.get(source) ?? new Set<string>();
-    set.add(symbol);
-    map.set(source, set);
-  }
-
-  private sorted(
-    map: Map<string, Set<string>>,
-  ): Array<[source: string, symbols: Set<string>]> {
-    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-  }
-}
 
 export class SelectionWriter extends Writer {
   protected readonly selectionTypeName: string;
@@ -271,9 +201,11 @@ export class SelectionWriter extends Writer {
   }
 
   protected prepareImports() {
-    const imports = new ImportCollector((stmt) => this.importStatement(stmt));
+    const imports = new JSImportCollector<SelectionImportSymbol>(
+      (stmt) => this.importStatement(stmt),
+      CODEGEN_IMPORT_SOURCE_MAP,
+    );
 
-    imports.useMapped("FieldOptions");
     imports.useMapped("DirectiveArgs");
     imports.useMapped("Selection");
     if (this.hasArgs) {

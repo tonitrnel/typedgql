@@ -96,7 +96,7 @@ export abstract class Writer {
     this.prepareImports();
     this.importFinalized = true;
 
-    for (const stmt of this.importStatements) {
+    for (const stmt of Array.from(this.importStatements).sort()) {
       this.stream.write(stmt);
       this.stream.write("\n");
     }
@@ -318,7 +318,10 @@ export abstract class Writer {
   // ── Private ──
 
   private writeNamedTypeImports(): void {
-    for (const importedType of this.importedTypes) {
+    const sortedTypes = Array.from(this.importedTypes).sort(
+      (a, b) => a.name.localeCompare(b.name),
+    );
+    for (const importedType of sortedTypes) {
       const behavior = this.importingBehavior(importedType);
       if (behavior === "self") continue;
       const from = this.resolveTypeImportPath(importedType, behavior);
@@ -329,9 +332,12 @@ export abstract class Writer {
   private writeMappedScalarImports(): void {
     if (this.importedScalarTypes.size === 0) return;
     const sourcePrefix = this.isUnderGlobalDir() ? "../" : "../../";
-    for (const [importSource, typeNames] of this.importedScalarTypes) {
+    const sortedEntries = Array.from(this.importedScalarTypes.entries()).sort(
+      (a, b) => a[0].localeCompare(b[0]),
+    );
+    for (const [importSource, typeNames] of sortedEntries) {
       this.stream.write(
-        `import type { ${[...typeNames].join(", ")} } from '${sourcePrefix}${importSource}';\n`,
+        `import type { ${Array.from(typeNames).sort().join(", ")} } from '${sourcePrefix}${importSource}';\n`,
       );
     }
   }
