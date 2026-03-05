@@ -37,6 +37,11 @@ type Mutation {
   updateUser(input: UpdateUserInput!): User!
 }
 
+type Subscription {
+  postUpdated(id: ID!): Post!
+  userOnline: User!
+}
+
 type Post {
   id: ID!
   title: String!

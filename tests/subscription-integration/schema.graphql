@@ -1,0 +1,18 @@
+type Query {
+  ping: String
+}
+
+type Subscription {
+  postCreated(id: ID!): Post!
+}
+
+type Post {
+  id: ID!
+  title: String!
+  author: User!
+}
+
+type User {
+  id: ID!
+  name: String!
+}

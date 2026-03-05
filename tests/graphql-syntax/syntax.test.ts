@@ -20,6 +20,11 @@ const MUTATION_SELECTION_FILE = join(
   "selections",
   "mutation-selection.ts",
 );
+const SUBSCRIPTION_SELECTION_FILE = join(
+  GENERATED_DIR,
+  "selections",
+  "subscription-selection.ts",
+);
 
 function parseQuery(queryBody: string, variableDefs = ""): void {
   const doc = `query Q${variableDefs} ${queryBody}`;
@@ -28,6 +33,11 @@ function parseQuery(queryBody: string, variableDefs = ""): void {
 
 function parseMutation(mutationBody: string, variableDefs = ""): void {
   const doc = `mutation M${variableDefs} ${mutationBody}`;
+  parse(doc);
+}
+
+function parseSubscription(subscriptionBody: string, variableDefs = ""): void {
+  const doc = `subscription S${variableDefs} ${subscriptionBody}`;
   parse(doc);
 }
 
@@ -228,5 +238,35 @@ describe("GraphQL syntax generation (from codegen output)", () => {
       parseQuery(selection.toString(), "($lookupInput: UserLookupInput!)"),
     ).not.toThrow();
     expect(selection.toString()).toContain("$lookupInput");
+  });
+
+  it("builds valid subscription syntax from generated root selection", async () => {
+    const mod = (await import(pathToFileURL(SUBSCRIPTION_SELECTION_FILE).href)) as {
+      subscription$: any;
+    };
+
+    const selection = mod.subscription$
+      .postUpdated({ id: "p1" }, (p: any) => p.id.title)
+      .$directive("cacheControl", { maxAge: 3 });
+
+    expect(() => parseSubscription(selection.toString())).not.toThrow();
+    expect(selection.toString()).toContain("postUpdated");
+    expect(selection.toString()).toContain("@cacheControl");
+  });
+
+  it("builds valid subscription syntax with parameter refs", async () => {
+    const mod = (await import(pathToFileURL(SUBSCRIPTION_SELECTION_FILE).href)) as {
+      subscription$: any;
+    };
+
+    const selection = mod.subscription$.postUpdated(
+      { id: ParameterRef.of("postId") },
+      (p: any) => p.id.author((a: any) => a.id.name),
+    );
+
+    expect(() =>
+      parseSubscription(selection.toString(), "($postId: ID!)"),
+    ).not.toThrow();
+    expect(selection.toString()).toContain("$postId");
   });
 });
