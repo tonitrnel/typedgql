@@ -1,26 +1,68 @@
 // ─── Type Categories ──────────────────────────────────────────────────
 
-export type SchemaTypeCategory = "OBJECT" | "EMBEDDED" | "CONNECTION" | "EDGE";
-export type SchemaFieldCategory = "ID" | "SCALAR" | "REFERENCE" | "LIST" | "CONNECTION";
+/**
+ * Runtime-level classification for GraphQL composite types.
+ *
+ * - OBJECT:
+ *   Represents identity-bearing types (typically with an id-like field) that are
+ *   treated as independently addressable nodes in selection/proxy logic.
+ * - EMBEDDED:
+ *   Represents value-like types without independent identity; they are selected
+ *   as nested structures and are not treated as standalone entity nodes.
+ */
+export type SchemaTypeCategory = "OBJECT" | "EMBEDDED";
+
+/**
+ * Runtime-level classification for fields in a schema type.
+ *
+ * - ID:
+ *   Identity field of an OBJECT-like node (used for entity identity semantics).
+ * - SCALAR:
+ *   Leaf/value field with no nested selection.
+ * - REFERENCE:
+ *   Single-valued association to another composite type (requires child selection).
+ * - LIST:
+ *   Multi-valued association to another composite type (requires child selection).
+ */
+export type SchemaFieldCategory = "ID" | "SCALAR" | "REFERENCE" | "LIST";
 
 // ─── Schema Type & Field (plain readonly interfaces) ─────────────────
 
+/**
+ * Normalized runtime representation of one GraphQL composite type.
+ */
 export interface SchemaType<E extends string = string> {
+  /** GraphQL type name. */
   readonly name: E;
+  /** Coarse runtime category used by selection/proxy behavior. */
   readonly category: SchemaTypeCategory;
+  /** Directly implemented interfaces / declared super types. */
   readonly interfaces: readonly SchemaType[];
+  /** Fields declared on this type itself (excluding inherited fields). */
   readonly ownFields: ReadonlyMap<string, SchemaField>;
+  /** Effective fields (own fields plus inherited/interface fields). */
   readonly fields: ReadonlyMap<string, SchemaField>;
 }
 
+/**
+ * Normalized runtime representation of one field on a schema type.
+ */
 export interface SchemaField {
+  /** Field name as exposed by GraphQL. */
   readonly name: string;
+  /** Coarse runtime field category. */
   readonly category: SchemaFieldCategory;
+  /** GraphQL argument type map keyed by argument name (SDL form, e.g. `ID!`). */
   readonly argGraphQLTypeMap: ReadonlyMap<string, string>;
+  /** Target GraphQL type name when this field points to another composite type. */
   readonly targetTypeName?: string;
+  /** Whether this field is multi-valued. */
   readonly isPlural: boolean;
+  /** Whether this field is an association/reference field. */
   readonly isAssociation: boolean;
+  /** Whether runtime treats this field as function-like (args or association). */
   readonly isFunction: boolean;
+  /** Whether this field may be omitted in generated runtime builders. */
   readonly isUndefinable: boolean;
 }
 
@@ -98,8 +140,6 @@ export function createSchemaType<E extends string>(
     }
   }
 
-  validateType(name, category, declaredFieldMap, superTypes);
-
   // Lazily compute merged fields (own + inherited)
   let _fields: ReadonlyMap<string, SchemaField> | undefined;
 
@@ -131,7 +171,7 @@ function buildField(
   targetTypeName?: string,
   undefinable?: boolean,
 ): SchemaField {
-  const isPlural = category === "LIST" || category === "CONNECTION";
+  const isPlural = category === "LIST";
   const isAssociation = category === "REFERENCE" || isPlural;
 
   return {
@@ -144,29 +184,6 @@ function buildField(
     isFunction: argGraphQLTypeMap.size !== 0 || isAssociation || targetTypeName !== undefined,
     isUndefinable: undefinable ?? false,
   };
-}
-
-function validateType(
-  name: string,
-  category: SchemaTypeCategory,
-  declaredFields: ReadonlyMap<string, SchemaField>,
-  superTypes: readonly SchemaType[],
-) {
-  if (category === "CONNECTION") {
-    const edges = declaredFields.get("edges");
-    if (!edges) throw new Error(`Type "${name}": CONNECTION must have an "edges" field`);
-    if (edges.category !== "LIST") throw new Error(`Type "${name}": CONNECTION "edges" must be LIST`);
-  } else if (category === "EDGE") {
-    const node = declaredFields.get("node");
-    if (!node) throw new Error(`Type "${name}": EDGE must have a "node" field`);
-    if (node.category !== "REFERENCE") throw new Error(`Type "${name}": EDGE "node" must be REFERENCE`);
-    const cursor = declaredFields.get("cursor");
-    if (cursor && cursor.category !== "SCALAR") throw new Error(`Type "${name}": EDGE "cursor" must be SCALAR`);
-  }
-
-  if ((category === "CONNECTION" || category === "EDGE") && superTypes.length !== 0) {
-    throw new Error(`Type "${name}": ${category} cannot have super types`);
-  }
 }
 
 function collectFields(type: SchemaType): ReadonlyMap<string, SchemaField> {

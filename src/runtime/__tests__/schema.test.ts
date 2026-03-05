@@ -46,47 +46,14 @@ describe("schema runtime", () => {
     expect(derived.fields.has("name")).toBe(true);
   });
 
-  it("validates connection/edge shape rules", () => {
-    expect(() =>
-      createSchemaType("BadConnectionNoEdges", "CONNECTION", [], []),
-    ).toThrow('Type "BadConnectionNoEdges": CONNECTION must have an "edges" field');
-
-    expect(() =>
-      createSchemaType("BadConnectionEdgeType", "CONNECTION", [], [
-        { name: "edges", category: "SCALAR" },
-      ]),
-    ).toThrow('Type "BadConnectionEdgeType": CONNECTION "edges" must be LIST');
-
-    expect(() =>
-      createSchemaType("BadEdgeNoNode", "EDGE", [], [
-        { name: "cursor", category: "SCALAR" },
-      ]),
-    ).toThrow('Type "BadEdgeNoNode": EDGE must have a "node" field');
-
-    expect(() =>
-      createSchemaType("BadEdgeNodeType", "EDGE", [], [
-        { name: "node", category: "SCALAR" },
-      ]),
-    ).toThrow('Type "BadEdgeNodeType": EDGE "node" must be REFERENCE');
-
-    expect(() =>
-      createSchemaType("BadEdgeCursorType", "EDGE", [], [
-        { name: "node", category: "REFERENCE", targetTypeName: "X" },
-        { name: "cursor", category: "LIST", targetTypeName: "X" },
-      ]),
-    ).toThrow('Type "BadEdgeCursorType": EDGE "cursor" must be SCALAR');
-
+  it("supports only generic OBJECT/EMBEDDED categories", () => {
     const superType = createSchemaType("SchemaSuperType", "OBJECT", [], ["id"]);
-    expect(() =>
-      createSchemaType("BadConnectionWithSuper", "CONNECTION", [superType], [
-        { name: "edges", category: "LIST", targetTypeName: "SchemaEdgeType" },
-      ]),
-    ).toThrow('Type "BadConnectionWithSuper": CONNECTION cannot have super types');
-    expect(() =>
-      createSchemaType("BadEdgeWithSuper", "EDGE", [superType], [
-        { name: "node", category: "REFERENCE", targetTypeName: "SchemaNodeType" },
-      ]),
-    ).toThrow('Type "BadEdgeWithSuper": EDGE cannot have super types');
+    const embedded = createSchemaType("SchemaEmbeddedType", "EMBEDDED", [superType], [
+      { name: "profile", category: "REFERENCE", targetTypeName: "SchemaSuperType" },
+    ]);
+    expect(embedded.category).toBe("EMBEDDED");
+    expect(embedded.fields.has("id")).toBe(true);
+    expect(embedded.fields.get("profile")?.isAssociation).toBe(true);
   });
 
   it("resolves lazy registered factories and prevents circular resolution", () => {

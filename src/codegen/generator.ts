@@ -3,12 +3,10 @@ import {
   GraphQLField,
   GraphQLInputObjectType,
   GraphQLInterfaceType,
-  GraphQLList,
   GraphQLNamedType,
   GraphQLNonNull,
   GraphQLObjectType,
   GraphQLSchema,
-  GraphQLString,
   GraphQLType,
   GraphQLUnionType,
 } from "graphql";
@@ -19,9 +17,9 @@ import { join, resolve } from "path";
 import { SelectionWriter } from "./writers/selection";
 import { EnumWriter } from "./writers/enum";
 import { InputWriter } from "./writers/input";
-import { CommonTypesWriter } from "./writers/types";
+import { TypeHierarchyWriter } from "./writers/types";
 import { TypeHierarchyGraph } from "./type-hierarchy-graph";
-import { Connection, SelectionContext } from "./selection-context";
+import { SelectionContext } from "./selection-context";
 import { EnumInputMetadataWriter } from "./writers/enum-input-metadata";
 import { isExcludedTypeName, targetTypeOf, toKebabCase } from "./utils";
 import ASYNC_CODE from "./templates/async-runtime.template?raw";
@@ -73,8 +71,6 @@ export class Generator {
     const selectionTypes: Array<
       GraphQLObjectType | GraphQLInterfaceType | GraphQLUnionType
     > = [];
-    const connections = new Map<GraphQLType, Connection>();
-    const edgeTypes = new Set<GraphQLType>();
     const inputTypes: GraphQLInputObjectType[] = [];
     const enumTypes: GraphQLEnumType[] = [];
 
@@ -83,19 +79,6 @@ export class Generator {
       if (typeName.startsWith("__")) continue;
 
       const type = typeMap[typeName]!;
-      if (
-        type instanceof GraphQLObjectType ||
-        type instanceof GraphQLInterfaceType
-      ) {
-        const tuple = parseConnectionType(type);
-        if (tuple) {
-          connections.set(tuple[0], {
-            edgeType: tuple[1],
-            nodeType: tuple[2],
-          });
-          edgeTypes.add(tuple[1]);
-        }
-      }
       if (isExcludedTypeName(this.options, type.name)) continue;
 
       if (
@@ -124,7 +107,6 @@ export class Generator {
     >();
 
     for (const selectionType of selectionTypes) {
-      if (connections.has(selectionType) || edgeTypes.has(selectionType)) continue;
       if (
         !(selectionType instanceof GraphQLObjectType) &&
         !(selectionType instanceof GraphQLInterfaceType)
@@ -185,8 +167,6 @@ export class Generator {
       selectionTypes,
       entityTypes,
       embeddedTypes,
-      connections,
-      edgeTypes,
       triggerableTypes,
       idFieldMap,
       typesWithParameterizedField,
@@ -207,7 +187,7 @@ export class Generator {
       promises.push(this.generateEnumTypes(enumTypes));
     }
 
-    promises.push(this.generateCommonTypes(schema, typeHierarchy));
+    promises.push(this.generateTypeHierarchy(schema, typeHierarchy));
     promises.push(this.generateEnumInputMetadata(schema));
     promises.push(this.generateAsyncRuntime());
     promises.push(this.writeIndex(schema));
@@ -316,12 +296,12 @@ export class Generator {
     ]);
   }
 
-  private async generateCommonTypes(
+  private async generateTypeHierarchy(
     schema: GraphQLSchema,
     typeHierarchy: TypeHierarchyGraph,
   ) {
     const stream = createStream(join(this.targetDir, "type-hierarchy.ts"));
-    new CommonTypesWriter(schema, typeHierarchy, stream, this.options).write();
+    new TypeHierarchyWriter(schema, typeHierarchy, stream, this.options).write();
     await endStream(stream);
   }
 
@@ -607,76 +587,4 @@ export function endStream(stream: WriteStream): Promise<void> {
     stream.end(() => resolve());
     stream.on("error", reject);
   });
-}
-
-function parseConnectionType(
-  type: GraphQLObjectType | GraphQLInterfaceType,
-):
-  | [
-    GraphQLObjectType | GraphQLInterfaceType,
-    GraphQLObjectType | GraphQLInterfaceType,
-    GraphQLObjectType | GraphQLInterfaceType | GraphQLUnionType,
-  ]
-  | undefined {
-  const edges = type.getFields()["edges"];
-  if (!edges) return undefined;
-
-  const listType =
-    edges.type instanceof GraphQLNonNull ? edges.type.ofType : edges.type;
-  if (!(listType instanceof GraphQLList)) return undefined;
-
-  const edgeType =
-    listType.ofType instanceof GraphQLNonNull
-      ? listType.ofType.ofType
-      : listType.ofType;
-  if (!(edgeType instanceof GraphQLObjectType)) return undefined;
-
-  const node = edgeType.getFields()["node"];
-  if (!node) return undefined;
-
-  if (!(edges.type instanceof GraphQLNonNull)) {
-    warn(`The type "${type.name}" is connection, its field "edges" must be not-null list`);
-  }
-  if (!(listType.ofType instanceof GraphQLNonNull)) {
-    warn(`The type "${type.name}" is connection, element of its field "edges" must be not-null`);
-  }
-
-  let nodeType: GraphQLType;
-  if (node.type instanceof GraphQLNonNull) {
-    nodeType = node.type.ofType;
-  } else {
-    warn(`The type "${edgeType}" is edge, its field "node" must be non-null`);
-    nodeType = node.type;
-  }
-
-  if (
-    !(nodeType instanceof GraphQLObjectType) &&
-    !(nodeType instanceof GraphQLInterfaceType) &&
-    !(nodeType instanceof GraphQLUnionType)
-  ) {
-    throw new Error(
-      `The type "${edgeType}" is edge, its field "node" must be object, interface, union or their non-null wrappers`,
-    );
-  }
-
-  const cursor = edgeType.getFields()["cursor"];
-  if (!cursor) {
-    warn(`The type "${edgeType}" is edge, it must defined a field named "cursor"`);
-  } else {
-    const cursorType =
-      cursor.type instanceof GraphQLNonNull
-        ? cursor.type.ofType
-        : cursor.type;
-    if (cursorType !== GraphQLString) {
-      throw new Error(
-        `The type "${edgeType}" is edge, its field "cursor" must be string`,
-      );
-    }
-  }
-
-  return [type, edgeType, nodeType];
-}
-
-function warn(message: string) {
-  console.warn(`[typedgql] ${message}`);
 }

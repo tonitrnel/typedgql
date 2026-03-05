@@ -16,11 +16,6 @@ import {
 } from "graphql";
 import { TypeHierarchyGraph } from "./type-hierarchy-graph";
 
-export interface Connection {
-  readonly edgeType: GraphQLObjectType | GraphQLInterfaceType;
-  readonly nodeType: GraphQLObjectType | GraphQLInterfaceType | GraphQLUnionType;
-}
-
 export interface SelectionContext {
   /** The parsed GraphQL schema. */
   readonly schema: GraphQLSchema;
@@ -38,12 +33,6 @@ export interface SelectionContext {
 
   /** Types identified as embedded (no ID field). */
   readonly embeddedTypes: ReadonlySet<GraphQLType>;
-
-  /** Connection wrapper type -> edge/node mapping. */
-  readonly connections: ReadonlyMap<GraphQLType, Connection>;
-
-  /** Types identified as connection edges. */
-  readonly edgeTypes: ReadonlySet<GraphQLType>;
 
   /** Types that can trigger queries (Query type or entities with >1 field). */
   readonly triggerableTypes: ReadonlySet<GraphQLType>;

@@ -7,7 +7,10 @@ import {
   GraphQLString,
   introspectionFromSchema,
 } from "graphql";
-import { loadRemoteSchema } from "../schema-loader";
+import { mkdtemp, rm, writeFile } from "fs/promises";
+import { join } from "path";
+import { tmpdir } from "os";
+import { loadLocalSchema, loadRemoteSchema } from "../schema-loader";
 
 describe("schema-loader", () => {
   afterEach(() => {
@@ -55,5 +58,36 @@ describe("schema-loader", () => {
     const loadedType = loaded.getType("OneOfInput");
     expect(loadedType).toBeInstanceOf(GraphQLInputObjectType);
     expect((loadedType as GraphQLInputObjectType).isOneOf).toBe(true);
+  });
+
+  it("forwards custom headers and throws when remote schema has errors", async () => {
+    const fetchMock = vi.fn(async () => ({
+      json: async () => ({ errors: [{ message: "boom" }] }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      loadRemoteSchema("https://example.test/graphql", { Authorization: "Bearer token" }),
+    ).rejects.toThrow('[{"message":"boom"}]');
+
+    const requestInit = fetchMock.mock.calls[0]?.[1] as {
+      headers?: Record<string, string>;
+      method?: string;
+    };
+    expect(requestInit.method).toBe("POST");
+    expect(requestInit.headers?.Authorization).toBe("Bearer token");
+    expect(requestInit.headers?.["Content-Type"]).toBe("application/json");
+  });
+
+  it("loads local SDL schema from file", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "typedgql-schema-loader-"));
+    const schemaPath = join(dir, "schema.graphql");
+    await writeFile(schemaPath, "type Query { hello: String }", "utf8");
+
+    const schema = await loadLocalSchema(schemaPath);
+    expect(schema.getQueryType()?.name).toBe("Query");
+    expect(schema.getQueryType()?.getFields().hello).toBeDefined();
+
+    await rm(dir, { recursive: true, force: true });
   });
 });

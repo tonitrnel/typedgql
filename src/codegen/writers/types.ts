@@ -12,7 +12,7 @@ import { TypeHierarchyGraph } from "../type-hierarchy-graph";
 import { isExcludedTypeName } from "../utils";
 import { Writer } from "../writer";
 
-export class CommonTypesWriter extends Writer {
+export class TypeHierarchyWriter extends Writer {
   constructor(
     _schema: GraphQLSchema,
     private readonly typeHierarchy: TypeHierarchyGraph,

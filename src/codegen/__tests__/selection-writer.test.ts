@@ -2,10 +2,14 @@ import { describe, it, expect } from "vitest";
 import * as fc from "fast-check";
 import {
   GraphQLObjectType,
+  GraphQLInterfaceType,
+  GraphQLUnionType,
   GraphQLString,
   GraphQLNonNull,
   GraphQLList,
   GraphQLSchema,
+  GraphQLFieldMap,
+  GraphQLType,
 } from "graphql";
 import { SelectionWriter } from "../writers/selection";
 import { TypeHierarchyGraph } from "../type-hierarchy-graph";
@@ -33,11 +37,19 @@ function makeCtx(schema: GraphQLSchema): SelectionContext {
     selectionTypes: [],
     entityTypes: new Set(),
     embeddedTypes: new Set(),
-    connections: new Map(),
-    edgeTypes: new Set(),
     triggerableTypes: new Set(),
     idFieldMap: new Map(),
     typesWithParameterizedField: new Set(),
+  };
+}
+
+function makeCtxWithOverrides(
+  schema: GraphQLSchema,
+  overrides: Partial<SelectionContext>,
+): SelectionContext {
+  return {
+    ...makeCtx(schema),
+    ...overrides,
   };
 }
 
@@ -128,5 +140,154 @@ describe("Selection 接口生成正确性", () => {
     const output = getOutput();
 
     expect(output).toContain("ReadonlyArray<X>");
+  });
+
+  it("field description and deprecation are emitted as JSDoc", () => {
+    const modelType = new GraphQLObjectType({
+      name: "DocType",
+      fields: {
+        legacyName: {
+          type: new GraphQLNonNull(GraphQLString),
+          description: "Primary name\nshown to users",
+          deprecationReason: "Use profileName */ instead",
+        },
+      },
+    });
+
+    const schema = new GraphQLSchema({ query: modelType });
+    const ctx = makeCtx(schema);
+    const { stream, getOutput } = makeStream();
+
+    const writer = new SelectionWriter(modelType, ctx, stream, baseOptions);
+    writer.write();
+    const output = getOutput();
+
+    expect(output).toContain("/**");
+    expect(output).toContain(" * Primary name");
+    expect(output).toContain(" * shown to users");
+    expect(output).toContain(" * @deprecated Use profileName *\\/ instead");
+  });
+
+  it("union selection only includes shared fields", () => {
+    const A = new GraphQLObjectType({
+      name: "A",
+      fields: {
+        id: { type: new GraphQLNonNull(GraphQLString) },
+        onlyA: { type: new GraphQLNonNull(GraphQLString) },
+      },
+    });
+    const B = new GraphQLObjectType({
+      name: "B",
+      fields: {
+        id: { type: new GraphQLNonNull(GraphQLString) },
+        onlyB: { type: new GraphQLNonNull(GraphQLString) },
+      },
+    });
+    const U = new GraphQLUnionType({
+      name: "SearchResult",
+      types: [A, B],
+      resolveType: () => A,
+    });
+    const Query = new GraphQLObjectType({
+      name: "Query",
+      fields: {
+        result: { type: U },
+      },
+    });
+    const schema = new GraphQLSchema({ query: Query, types: [A, B, U] });
+    const ctx = makeCtx(schema);
+    const { stream, getOutput } = makeStream();
+
+    const writer = new SelectionWriter(U, ctx, stream, baseOptions);
+    writer.write();
+    const output = getOutput();
+
+    expect(output).toContain('readonly id');
+    expect(output).not.toContain('readonly onlyA');
+    expect(output).not.toContain('readonly onlyB');
+  });
+
+  it("excludedTypes filters out association fields from generated selection", () => {
+    const Hidden = makeScalarType("HiddenType", ["id"]);
+    const Parent = new GraphQLObjectType({
+      name: "ParentWithExcluded",
+      fields: {
+        id: { type: new GraphQLNonNull(GraphQLString) },
+        hidden: { type: Hidden },
+      },
+    });
+    const schema = new GraphQLSchema({ query: Parent, types: [Hidden] });
+    const ctx = makeCtx(schema);
+    const { stream, getOutput } = makeStream();
+
+    const writer = new SelectionWriter(Parent, ctx, stream, {
+      ...baseOptions,
+      excludedTypes: ["HiddenType"],
+    });
+    writer.write();
+    const output = getOutput();
+
+    expect(output).toContain('readonly id');
+    expect(output).not.toContain('hidden(');
+  });
+
+  it("schema descriptor includes upcast type references for inherited object types", () => {
+    const Node = new GraphQLInterfaceType({
+      name: "Node",
+      fields: {
+        id: { type: new GraphQLNonNull(GraphQLString) },
+      },
+    });
+    const User = new GraphQLObjectType({
+      name: "UserWithInterface",
+      interfaces: [Node],
+      fields: {
+        id: { type: new GraphQLNonNull(GraphQLString) },
+        name: { type: GraphQLString },
+      },
+    });
+    const Query = new GraphQLObjectType({
+      name: "Query",
+      fields: {
+        user: { type: User },
+      },
+    });
+    const schema = new GraphQLSchema({ query: Query, types: [Node, User] });
+    const ctx = makeCtx(schema);
+    const { stream, getOutput } = makeStream();
+
+    const writer = new SelectionWriter(User, ctx, stream, baseOptions);
+    writer.write();
+    const output = getOutput();
+
+    expect(output).toContain('resolveRegisteredSchemaType("Node")!');
+  });
+
+  it("importingBehavior returns self/same_dir/other_dir branches", () => {
+    const modelType = makeScalarType("BehaviorType", ["id"]);
+    const schema = new GraphQLSchema({ query: modelType });
+    const ctx = makeCtx(schema);
+    const { stream } = makeStream();
+
+    class SelectionWriterProbe extends SelectionWriter {
+      behavior(type: GraphQLType) {
+        return this.importingBehavior(type as any);
+      }
+    }
+
+    const writer = new SelectionWriterProbe(modelType, ctx, stream, baseOptions);
+    const sameDirType = new GraphQLObjectType({
+      name: "AnotherObject",
+      fields: {} as GraphQLFieldMap<any, any>,
+    });
+    const otherDirType = new GraphQLUnionType({
+      name: "UnionBehavior",
+      types: [modelType],
+      resolveType: () => modelType,
+    });
+
+    expect(writer.behavior(modelType)).toBe("self");
+    expect(writer.behavior(sameDirType)).toBe("same_dir");
+    expect(writer.behavior(otherDirType)).toBe("other_dir");
   });
 });

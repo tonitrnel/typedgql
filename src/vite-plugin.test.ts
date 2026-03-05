@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 const mocks = vi.hoisted(() => {
   const generate = vi.fn<() => Promise<void>>();
@@ -41,6 +44,23 @@ beforeEach(() => {
 });
 
 describe("typedgql vite plugin", () => {
+  it("injects optimizeDeps exclude and watch ignore override for devDependencyHmr", () => {
+    const plugin = typedgql({
+      schema: "./schema.graphql",
+      devDependencyHmr: true,
+    });
+    const cfg = plugin.config?.({
+      optimizeDeps: { exclude: ["foo"] },
+      server: { watch: { ignored: ["**/.git/**"] } },
+    } as any);
+
+    expect(cfg).toBeDefined();
+    expect(cfg?.optimizeDeps?.exclude).toContain("foo");
+    expect(cfg?.optimizeDeps?.exclude).toContain("@ptdgrp/typedgql");
+    expect(cfg?.server?.watch?.ignored).toContain("**/.git/**");
+    expect(cfg?.server?.watch?.ignored).toContain("!**/node_modules/@ptdgrp/typedgql/**");
+  });
+
   it("uses local schema loader for local schema path", async () => {
     const plugin = typedgql({ schema: "./schema.graphql", targetDir: "src/generated" });
     plugin.configResolved?.(createConfig("serve"));
@@ -102,6 +122,66 @@ describe("typedgql vite plugin", () => {
     expect(ws.send).toHaveBeenCalledWith({ type: "full-reload" });
   });
 
+  it("skips codegen when schema file content hash is unchanged", async () => {
+    const root = await mkdtemp(join(tmpdir(), "typedgql-vite-plugin-"));
+    const schemaDir = join(root, "schema");
+    await mkdir(schemaDir, { recursive: true });
+    const schemaPath = join(schemaDir, "schema.graphql");
+    await writeFile(schemaPath, "type Query { id: ID! }", "utf8");
+
+    const plugin = typedgql({ schema: "./schema/schema.graphql" });
+    plugin.configResolved?.(createConfig("serve"));
+
+    let onChange: ((file: string) => Promise<void>) | undefined;
+    const watcher = {
+      add: vi.fn(),
+      on: vi.fn((event: string, cb: (file: string) => Promise<void>) => {
+        if (event === "change") onChange = cb;
+      }),
+    };
+    const ws = { send: vi.fn() };
+    const server = { config: { root }, watcher, ws } as any;
+    plugin.configureServer?.(server);
+
+    expect(onChange).toBeDefined();
+    await onChange?.(schemaPath);
+    expect(mocks.generatorCtor).not.toHaveBeenCalled();
+    expect(ws.send).not.toHaveBeenCalled();
+
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it("runs codegen when schema file content changes and updates hash", async () => {
+    const root = await mkdtemp(join(tmpdir(), "typedgql-vite-plugin-change-"));
+    const schemaDir = join(root, "schema");
+    await mkdir(schemaDir, { recursive: true });
+    const schemaPath = join(schemaDir, "schema.graphql");
+    await writeFile(schemaPath, "type Query { id: ID! }", "utf8");
+
+    const plugin = typedgql({ schema: "./schema/schema.graphql" });
+    plugin.configResolved?.(createConfig("serve"));
+
+    let onChange: ((file: string) => Promise<void>) | undefined;
+    const watcher = {
+      add: vi.fn(),
+      on: vi.fn((event: string, cb: (file: string) => Promise<void>) => {
+        if (event === "change") onChange = cb;
+      }),
+    };
+    const ws = { send: vi.fn() };
+    const server = { config: { root }, watcher, ws } as any;
+    plugin.configureServer?.(server);
+
+    expect(onChange).toBeDefined();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await writeFile(schemaPath, "type Query { id: ID!, name: String }", "utf8");
+    await onChange?.(schemaPath);
+    expect(mocks.generatorCtor).toHaveBeenCalledTimes(1);
+    expect(ws.send).toHaveBeenCalledWith({ type: "full-reload" });
+
+    await rm(root, { recursive: true, force: true });
+  });
+
   it("does not register watcher when schema is remote", () => {
     const plugin = typedgql({ schema: "http://localhost:4000/graphql" });
     plugin.configResolved?.(createConfig("serve"));
@@ -112,6 +192,75 @@ describe("typedgql vite plugin", () => {
 
     expect(watcher.add).not.toHaveBeenCalled();
     expect(watcher.on).not.toHaveBeenCalled();
+  });
+
+  it("watches dependency directory and triggers full-reload by default", async () => {
+    const plugin = typedgql({
+      schema: "./schema.graphql",
+      devDependencyHmr: true,
+    });
+    plugin.configResolved?.(createConfig("serve"));
+
+    const changeHandlers: Array<(file: string) => Promise<void>> = [];
+    const watcher = {
+      add: vi.fn(),
+      on: vi.fn((event: string, cb: (file: string) => Promise<void>) => {
+        if (event === "change") changeHandlers.push(cb);
+      }),
+    };
+    const ws = { send: vi.fn() };
+    const server = {
+      config: { root: "/project" },
+      watcher,
+      ws,
+      restart: vi.fn(),
+    } as any;
+
+    plugin.configureServer?.(server);
+    expect(watcher.add).toHaveBeenCalledWith("/project/node_modules/@ptdgrp/typedgql/dist");
+    expect(changeHandlers.length).toBeGreaterThan(0);
+
+    for (const cb of changeHandlers) {
+      await cb("/project/node_modules/@ptdgrp/typedgql/dist/index.mjs");
+    }
+    expect(ws.send).toHaveBeenCalledWith({ type: "full-reload" });
+    expect(server.restart).not.toHaveBeenCalled();
+  });
+
+  it("supports restart strategy for dependency directory watcher", async () => {
+    const plugin = typedgql({
+      schema: "./schema.graphql",
+      devDependencyHmr: { strategy: "restart" },
+    });
+    plugin.configResolved?.(createConfig("serve"));
+
+    const changeHandlers: Array<(file: string) => Promise<void>> = [];
+    const watcher = {
+      add: vi.fn(),
+      on: vi.fn((event: string, cb: (file: string) => Promise<void>) => {
+        if (event === "change") changeHandlers.push(cb);
+      }),
+    };
+    const ws = { send: vi.fn() };
+    const restart = vi.fn(async () => {});
+    const server = {
+      config: { root: "/project" },
+      watcher,
+      ws,
+      restart,
+    } as any;
+
+    plugin.configureServer?.(server);
+    expect(watcher.add).toHaveBeenCalledWith(
+      "/project/node_modules/@ptdgrp/typedgql/dist",
+    );
+    expect(changeHandlers.length).toBeGreaterThan(0);
+
+    for (const cb of changeHandlers) {
+      await cb("/project/node_modules/@ptdgrp/typedgql/dist/runtime/proxy.mjs");
+    }
+    expect(restart).toHaveBeenCalledTimes(1);
+    expect(ws.send).not.toHaveBeenCalled();
   });
 
   it("prevents concurrent codegen runs and logs errors", async () => {

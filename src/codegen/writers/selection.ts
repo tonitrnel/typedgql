@@ -21,7 +21,82 @@ import { CodegenOptions } from "../options";
 import { ImportingBehavior, Writer } from "../writer";
 import { SelectionContext } from "../selection-context";
 
-type FieldCategory = "SCALAR" | "CONNECTION" | "LIST" | "REFERENCE" | "ID";
+type FieldCategory = "SCALAR" | "LIST" | "REFERENCE" | "ID";
+
+type ImportKind = "type" | "value";
+
+interface ImportSpec {
+  readonly source: string;
+  readonly kind: ImportKind;
+}
+
+const IMPORT_SOURCE_MAP: Record<string, ImportSpec> = {
+  AcceptableVariables: { source: "../../dist/index.mjs", kind: "type" },
+  UnresolvedVariables: { source: "../../dist/index.mjs", kind: "type" },
+  FieldOptions: { source: "../../dist/index.mjs", kind: "type" },
+  DirectiveArgs: { source: "../../dist/index.mjs", kind: "type" },
+  Selection: { source: "../../dist/index.mjs", kind: "type" },
+  createSelection: { source: "../../dist/index.mjs", kind: "value" },
+  createSchemaType: { source: "../../dist/index.mjs", kind: "value" },
+  registerSchemaTypeFactory: { source: "../../dist/index.mjs", kind: "value" },
+  resolveRegisteredSchemaType: { source: "../../dist/index.mjs", kind: "value" },
+  ENUM_INPUT_METADATA: { source: "../enum-input-metadata", kind: "value" },
+  WithTypeName: { source: "../type-hierarchy", kind: "type" },
+  ImplementationType: { source: "../type-hierarchy", kind: "type" },
+};
+
+class ImportCollector {
+  private typeBySource = new Map<string, Set<string>>();
+  private valueBySource = new Map<string, Set<string>>();
+  private sideEffects = new Set<string>();
+
+  constructor(private readonly sink: (stmt: string) => void) {}
+
+  useMapped(symbol: keyof typeof IMPORT_SOURCE_MAP): void {
+    const spec = IMPORT_SOURCE_MAP[symbol];
+    if (spec.kind === "type") {
+      this.useType(spec.source, symbol);
+    } else {
+      this.useValue(spec.source, symbol);
+    }
+  }
+
+  useType(source: string, symbol: string): void {
+    this.collect(this.typeBySource, source, symbol);
+  }
+
+  useValue(source: string, symbol: string): void {
+    this.collect(this.valueBySource, source, symbol);
+  }
+
+  useSideEffect(source: string): void {
+    this.sideEffects.add(source);
+  }
+
+  emit(): void {
+    for (const [source, symbols] of this.sorted(this.typeBySource)) {
+      this.sink(`import type { ${Array.from(symbols).sort().join(", ")} } from '${source}';`);
+    }
+    for (const [source, symbols] of this.sorted(this.valueBySource)) {
+      this.sink(`import { ${Array.from(symbols).sort().join(", ")} } from '${source}';`);
+    }
+    for (const source of Array.from(this.sideEffects).sort()) {
+      this.sink(`import '${source}';`);
+    }
+  }
+
+  private collect(map: Map<string, Set<string>>, source: string, symbol: string): void {
+    const set = map.get(source) ?? new Set<string>();
+    set.add(symbol);
+    map.set(source, set);
+  }
+
+  private sorted(
+    map: Map<string, Set<string>>,
+  ): Array<[source: string, symbols: Set<string>]> {
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }
+}
 
 export class SelectionWriter extends Writer {
   protected readonly selectionTypeName: string;
@@ -168,7 +243,6 @@ export class SelectionWriter extends Writer {
     const fieldCoreType =
       field.type instanceof GraphQLNonNull ? field.type.ofType : field.type;
     if (this.ctx.embeddedTypes.has(fieldCoreType)) return "SCALAR";
-    if (this.ctx.connections.has(fieldCoreType)) return "CONNECTION";
 
     if (fieldCoreType instanceof GraphQLList) {
       const elementType =
@@ -197,31 +271,29 @@ export class SelectionWriter extends Writer {
   }
 
   protected prepareImports() {
-    if (this.hasArgs) {
-      this.importStatement(
-        "import type { AcceptableVariables, UnresolvedVariables, FieldOptions, DirectiveArgs } from '../../dist/index.mjs';",
-      );
-    } else {
-      this.importStatement(
-        "import type { FieldOptions, DirectiveArgs } from '../../dist/index.mjs';",
-      );
-    }
-    this.importStatement(
-      "import { ENUM_INPUT_METADATA } from '../enum-input-metadata';",
-    );
+    const imports = new ImportCollector((stmt) => this.importStatement(stmt));
 
-    const importedSelectionTypeNames = new Set<string>();
-    importedSelectionTypeNames.add(this.superSelectionTypeName(this.modelType));
-    this.importStatement(
-      `import type { ${Array.from(importedSelectionTypeNames).join(", ")} } from '../../dist/index.mjs';`,
-    );
-    this.importStatement(
-      `import { createSelection, createSchemaType, registerSchemaTypeFactory, resolveRegisteredSchemaType } from '../../dist/index.mjs';`,
-    );
+    imports.useMapped("FieldOptions");
+    imports.useMapped("DirectiveArgs");
+    imports.useMapped("Selection");
+    if (this.hasArgs) {
+      imports.useMapped("AcceptableVariables");
+      imports.useMapped("UnresolvedVariables");
+    }
+
+    imports.useMapped("createSchemaType");
+    imports.useMapped("registerSchemaTypeFactory");
+    const superTypesForResolve = this.ctx.typeHierarchy.upcastTypeMap.get(this.modelType);
+    if (isOperationRootTypeName(this.modelType.name) || superTypesForResolve?.size) {
+      imports.useMapped("resolveRegisteredSchemaType");
+    }
+    if (isOperationRootTypeName(this.modelType.name)) {
+      imports.useMapped("createSelection");
+      imports.useMapped("ENUM_INPUT_METADATA");
+    }
     if (!isOperationRootTypeName(this.modelType.name)) {
-      this.importStatement(
-        "import type { WithTypeName, ImplementationType } from '../type-hierarchy';",
-      );
+      imports.useMapped("WithTypeName");
+      imports.useMapped("ImplementationType");
     }
     for (const field of Object.values(this.fieldMap)) {
       this.importFieldTypes(field);
@@ -239,16 +311,18 @@ export class SelectionWriter extends Writer {
       if (importedConcreteSelectionNames.has(selectionTypeName)) {
         if (!importedConcreteSelectionModules.has(selectionModule)) {
           importedConcreteSelectionModules.add(selectionModule);
-          this.importStatement(`import '${selectionModule}';`);
+          // Keep module side effects so each generated selection file can register its schema factory.
+          imports.useSideEffect(selectionModule);
         }
         continue;
       }
       importedConcreteSelectionNames.add(selectionTypeName);
-      this.importStatement(
-        `import type { ${selectionTypeName} } from '${selectionModule}';`,
-      );
+      imports.useType(selectionModule, selectionTypeName);
       importedConcreteSelectionModules.add(selectionModule);
-      this.importStatement(`import '${selectionModule}';`);
+      // Import both the type and the module itself:
+      // - `import type` is for TS signatures
+      // - side-effect import ensures registration code runs at module init time
+      imports.useSideEffect(selectionModule);
     }
 
     const upcastTypes = this.ctx.typeHierarchy.upcastTypeMap.get(
@@ -259,11 +333,14 @@ export class SelectionWriter extends Writer {
         const selectionTypeName = `${upcastType.name}${this.options.selectionSuffix ?? "Selection"}`;
         const importedNames = this.importedNamesForSuperType(upcastType);
         if (importedNames.length === 0) continue;
-        this.importStatement(
-          `import { ${importedNames.join(", ")} } from './${toKebabCase(selectionTypeName)}';`,
-        );
+        const importSource = `./${toKebabCase(selectionTypeName)}`;
+        for (const importedName of importedNames) {
+          imports.useValue(importSource, importedName);
+        }
       }
     }
+
+    imports.emit();
   }
 
   protected importedNamesForSuperType(
@@ -289,79 +366,71 @@ export class SelectionWriter extends Writer {
   }
 
   protected writeCode() {
-    const t = this.text.bind(this);
-    t(COMMENT);
-    t("export interface ");
-    t(this.selectionTypeName);
-    t(
-      "<T extends object, TVariables extends object, TLastField extends string = never> extends ",
-    );
-    t(this.superSelectionTypeName(this.modelType));
-    t("<'");
-    t(this.modelType.name);
-    t("', T, TVariables> ");
-
-    this.scope({ type: "block", multiLines: true, suffix: "\n" }, () => {
-      this.writeFragmentMethods();
-      this.writeDirectiveBuiltins();
-      this.write$omit();
-      this.write$alias();
-      this.writeTypeName();
-
-      for (const field of Object.values(this.fieldMap)) {
-        this.text("\n");
-        this.writePositiveProp(field);
-      }
-    });
-
+    this.text(COMMENT);
+    this.writeSelectionInterface();
     this.writeInstances();
     this.writeArgsInterface();
   }
 
-  protected writeFragmentMethods() {
-    const t = this.text.bind(this);
+  // Interface emission is split into header/body helpers to keep writeCode readable.
+  private writeSelectionInterface() {
+    this.writeSelectionInterfaceHeader();
+    this.scope({ type: "block", multiLines: true, suffix: "\n" }, () => {
+      this.writeSelectionInterfaceBody();
+    });
+  }
 
-    if (!isOperationRootTypeName(this.modelType.name)) {
-      t(
-        `\n$on<XName extends ImplementationType<'${this.modelType.name}'>, X extends object, XVariables extends object>`,
-      );
-      this.scope(
-        {
-          type: "parameters",
-          multiLines: !(this.modelType instanceof GraphQLUnionType),
-        },
-        () => {
-          t(
-            `child: ${this.superSelectionTypeName(this.modelType)}<XName, X, XVariables>`,
-          );
-          if (!(this.modelType instanceof GraphQLUnionType)) {
-            this.separator(", ");
-            t(
-              "fragmentName?: string // undefined: inline fragment; otherwise, real fragment",
-            );
-          }
-        },
-      );
-      t(`: ${this.selectionTypeName}`);
-      this.scope({ type: "generic", multiLines: true }, () => {
-        t(`XName extends '${this.modelType.name}' ?\n`);
-        t("T & X :\n");
-        t(`WithTypeName<T, ImplementationType<'${this.modelType.name}'>> & `);
-        this.scope(
-          { type: "blank", multiLines: true, prefix: "(", suffix: ")" },
-          () => {
-            t("WithTypeName<X, ImplementationType<XName>>");
-            this.separator(" | ");
-            t(
-              `{__typename: Exclude<ImplementationType<'${this.modelType.name}'>, ImplementationType<XName>>}`,
-            );
-          },
-        );
-        this.separator(", ");
-        t("TVariables & XVariables");
-      });
-      t(";\n");
+  private writeSelectionInterfaceHeader() {
+    const superSelection = this.superSelectionTypeName(this.modelType);
+    this.text(
+      `export interface ${this.selectionTypeName}<T extends object, TVariables extends object, TLastField extends string = never> extends ${superSelection}<'${this.modelType.name}', T, TVariables> `,
+    );
+  }
+
+  private writeSelectionInterfaceBody() {
+    // Built-ins first: fragment/directive helpers affect the shape of all field chains.
+    this.writeFragmentMethods();
+    this.writeDirectiveBuiltins();
+    this.write$omit();
+    this.write$alias();
+    this.writeTypeName();
+
+    const fields = Object.values(this.fieldMap);
+    for (const field of fields) {
+      this.text("\n");
+      this.writePositiveProp(field);
     }
+  }
+
+  protected writeFragmentMethods() {
+    if (isOperationRootTypeName(this.modelType.name)) return;
+
+    const t = this.text.bind(this);
+    const modelName = this.modelType.name;
+    const selectionSuperType = this.superSelectionTypeName(this.modelType);
+    const isUnion = this.modelType instanceof GraphQLUnionType;
+    const fragmentTypeName = `ImplementationType<'${modelName}'>`;
+    const childParamType = `${selectionSuperType}<XName, X, XVariables>`;
+    const resultDataType = `XName extends '${modelName}' ?\nT & X :\nWithTypeName<T, ${fragmentTypeName}> & (WithTypeName<X, ImplementationType<XName>> | {__typename: Exclude<${fragmentTypeName}, ImplementationType<XName>>})`;
+
+    // `$on` models GraphQL fragment spread behavior:
+    // - exact type match: merge child fields directly
+    // - polymorphic match: add discriminated __typename union branch
+    t(`\n$on<XName extends ${fragmentTypeName}, X extends object, XVariables extends object>`);
+    this.scope({ type: "parameters", multiLines: !isUnion }, () => {
+      t(`child: ${childParamType}`);
+      if (!isUnion) {
+        this.separator(", ");
+        t("fragmentName?: string // undefined: inline fragment; otherwise, real fragment");
+      }
+    });
+    t(`: ${this.selectionTypeName}`);
+    this.scope({ type: "generic", multiLines: true }, () => {
+      t(resultDataType);
+      this.separator(", ");
+      t("TVariables & XVariables");
+    });
+    t(";\n");
   }
 
   private writeDirectiveBuiltins() {
@@ -820,15 +889,9 @@ export class SelectionWriter extends Writer {
 
   private schemaTypeCategory(
     type: GraphQLObjectType | GraphQLInterfaceType | GraphQLUnionType,
-  ): '"EMBEDDED"' | '"CONNECTION"' | '"EDGE"' | '"OBJECT"' {
+  ): '"EMBEDDED"' | '"OBJECT"' {
     if (this.ctx.embeddedTypes.has(type)) {
       return '"EMBEDDED"';
-    }
-    if (this.ctx.connections.has(type)) {
-      return '"CONNECTION"';
-    }
-    if (this.ctx.edgeTypes.has(type)) {
-      return '"EDGE"';
     }
     return '"OBJECT"';
   }
