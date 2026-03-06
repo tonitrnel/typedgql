@@ -1,4 +1,5 @@
 import { expectAssignable, expectError, expectType } from "tsd";
+import { fragment$ } from "./__gen__/index";
 import { query$ } from "./__gen__/selections/query-selection";
 import { mutation$ } from "./__gen__/selections/mutation-selection";
 import { subscription$ } from "./__gen__/selections/subscription-selection";
@@ -9,6 +10,10 @@ const postSelection = query$((q) => q.post({ id: "p1" }, (p) => p.id.title));
 expectType<string>(postSelection.toString());
 expectType<string>(postSelection.toFragmentString());
 expectType<string>(postSelection.toJSON());
+
+const userBaseFragment = fragment$("User", (u) => u.id.name, "UserBase");
+query$((q) => q.viewer((u) => u.$use(userBaseFragment)));
+expectError(fragment$("NotExistingType", (x: any) => x));
 
 query$((q) => q.post({ id: ParameterRef.of("postId") }, (p) => p.id));
 query$((q) => q.viewer((u) => u.id.name.email));

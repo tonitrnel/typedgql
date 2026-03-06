@@ -191,7 +191,7 @@ export class Generator {
     promises.push(this.generateTypeHierarchy(schema, typeHierarchy));
     promises.push(this.generateEnumInputMetadata(schema));
     promises.push(this.generateAsyncRuntime());
-    promises.push(this.writeIndex(schema));
+    promises.push(this.writeIndex(schema, ctx));
 
     await Promise.all(promises);
 
@@ -349,12 +349,19 @@ export class Generator {
     await endStream(stream);
   }
 
-  private async writeIndex(schema: GraphQLSchema) {
+  private async writeIndex(schema: GraphQLSchema, ctx: SelectionContext) {
     const stream = createStream(join(this.targetDir, "index.ts"));
+    const selectionSuffix = this.options.selectionSuffix ?? "Selection";
     stream.write(`import type { Selection } from "../dist/index.mjs";\n`);
     stream.write(
       `import { FragmentRef, createSelection, resolveRegisteredSchemaType } from "../dist/index.mjs";\n`,
     );
+    for (const type of ctx.selectionTypes) {
+      const selectionTypeName = `${type.name}${selectionSuffix}`;
+      stream.write(
+        `import type { ${selectionTypeName} } from "./selections/${toKebabCase(selectionTypeName)}";\n`,
+      );
+    }
     stream.write(
       `import { ENUM_INPUT_METADATA } from "./enum-input-metadata";\n\n`,
     );
@@ -370,12 +377,33 @@ export class Generator {
     stream.write(
       "export { upcastTypes, downcastTypes } from './type-hierarchy';\n",
     );
+    const fragmentTypeNames =
+      ctx.selectionTypes.length === 0
+        ? "never"
+        : ctx.selectionTypes.map((t) => `'${t.name}'`).join(" | ");
     stream.write(
-      `\nexport function fragment$<E extends string, T extends object, TVariables extends object>(\n`,
+      `export type FragmentTypeName = ${fragmentTypeNames};\n`,
+    );
+    stream.write(
+      `export type FragmentSelectionFor<E extends FragmentTypeName, T extends object = {}, TVariables extends object = {}> =\n`,
+    );
+    if (ctx.selectionTypes.length === 0) {
+      stream.write("  never;\n");
+    } else {
+      for (const type of ctx.selectionTypes) {
+        const selectionTypeName = `${type.name}${selectionSuffix}`;
+        stream.write(
+          `  E extends '${type.name}' ? ${selectionTypeName}<T, TVariables> :\n`,
+        );
+      }
+      stream.write("  never;\n");
+    }
+    stream.write(
+      `\nexport function fragment$<E extends FragmentTypeName, T extends object, TVariables extends object>(\n`,
     );
     stream.write(`  typeName: E,\n`);
     stream.write(
-      `  builder: (it: Selection<E, {}, {}>) => Selection<E, T, TVariables>,\n`,
+      `  builder: (it: FragmentSelectionFor<E, {}, {}>) => FragmentSelectionFor<E, T, TVariables>,\n`,
     );
     stream.write(`  fragmentName?: string,\n`);
     stream.write(`): FragmentRef<string, E, T, TVariables> {\n`);
@@ -392,7 +420,9 @@ export class Generator {
     stream.write(`    ENUM_INPUT_METADATA,\n`);
     stream.write(`    undefined,\n`);
     stream.write(`  );\n`);
-    stream.write(`  const selection = builder(base);\n`);
+    stream.write(
+      `  const selection = builder(base as unknown as FragmentSelectionFor<E, {}, {}>);\n`,
+    );
     stream.write(
       `  return new FragmentRef(fragmentName ?? \`\${typeName}Fragment\`, selection as any);\n`,
     );
