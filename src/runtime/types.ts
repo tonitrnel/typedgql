@@ -16,7 +16,7 @@ export interface Selection<
   toFragmentString(): string;
   toJSON(): string;
 
-  readonly [__phantom]: readonly [T, TVariables];
+  readonly [__phantom]: readonly [E, T, TVariables];
 }
 
 export interface SelectionRuntime<E extends string = string> {

@@ -70,7 +70,9 @@ const SCHEMA_TYPE_REGISTRY = new Map<string, SchemaType>();
 const SCHEMA_TYPE_FACTORY_REGISTRY = new Map<string, () => SchemaType>();
 const SCHEMA_TYPE_RESOLVING = new Set<string>();
 
-export function resolveRegisteredSchemaType(typeName: string): SchemaType | undefined {
+export function resolveRegisteredSchemaType(
+  typeName: string,
+): SchemaType | undefined {
   const registered = SCHEMA_TYPE_REGISTRY.get(typeName);
   if (registered) {
     return registered;
@@ -81,7 +83,9 @@ export function resolveRegisteredSchemaType(typeName: string): SchemaType | unde
     return undefined;
   }
   if (SCHEMA_TYPE_RESOLVING.has(typeName)) {
-    throw new Error(`Circular schema factory resolution detected for "${typeName}"`);
+    throw new Error(
+      `Circular schema factory resolution detected for "${typeName}"`,
+    );
   }
 
   SCHEMA_TYPE_RESOLVING.add(typeName);
@@ -95,7 +99,10 @@ export function resolveRegisteredSchemaType(typeName: string): SchemaType | unde
   return SCHEMA_TYPE_REGISTRY.get(typeName);
 }
 
-export function registerSchemaTypeFactory(typeName: string, factory: () => SchemaType) {
+export function registerSchemaTypeFactory(
+  typeName: string,
+  factory: () => SchemaType,
+) {
   if (!SCHEMA_TYPE_FACTORY_REGISTRY.has(typeName)) {
     SCHEMA_TYPE_FACTORY_REGISTRY.set(typeName, factory);
   }
@@ -106,12 +113,12 @@ export function registerSchemaTypeFactory(typeName: string, factory: () => Schem
 type FieldDescriptor =
   | string
   | {
-    readonly name: string;
-    readonly category: SchemaFieldCategory;
-    readonly undefinable?: boolean;
-    readonly argGraphQLTypeMap?: { readonly [key: string]: string };
-    readonly targetTypeName?: string;
-  };
+      readonly name: string;
+      readonly category: SchemaFieldCategory;
+      readonly undefinable?: boolean;
+      readonly argGraphQLTypeMap?: { readonly [key: string]: string };
+      readonly targetTypeName?: string;
+    };
 
 // ─── Factory ────────────────────────────────────────────────────────
 
@@ -135,7 +142,13 @@ export function createSchemaType<E extends string>(
       }
       declaredFieldMap.set(
         desc.name,
-        buildField(desc.name, desc.category, argMap, desc.targetTypeName, desc.undefinable),
+        buildField(
+          desc.name,
+          desc.category,
+          argMap,
+          desc.targetTypeName,
+          desc.undefinable,
+        ),
       );
     }
   }
@@ -150,9 +163,8 @@ export function createSchemaType<E extends string>(
     ownFields: declaredFieldMap,
     get fields(): ReadonlyMap<string, SchemaField> {
       if (!_fields) {
-        _fields = superTypes.length === 0
-          ? declaredFieldMap
-          : collectFields(result);
+        _fields =
+          superTypes.length === 0 ? declaredFieldMap : collectFields(result);
       }
       return _fields;
     },
@@ -181,7 +193,10 @@ function buildField(
     targetTypeName,
     isPlural,
     isAssociation,
-    isFunction: argGraphQLTypeMap.size !== 0 || isAssociation || targetTypeName !== undefined,
+    isFunction:
+      argGraphQLTypeMap.size !== 0 ||
+      isAssociation ||
+      targetTypeName !== undefined,
     isUndefinable: undefinable ?? false,
   };
 }

@@ -53,7 +53,7 @@ const RESERVED_FIELDS = new Set([
 ]);
 
 export class Generator {
-  constructor(protected options: CodegenOptions) { }
+  constructor(protected options: CodegenOptions) {}
 
   /** Resolved output directory (uses default if not configured) */
   private get targetDir(): string {
@@ -110,7 +110,8 @@ export class Generator {
       if (
         !(selectionType instanceof GraphQLObjectType) &&
         !(selectionType instanceof GraphQLInterfaceType)
-      ) continue;
+      )
+        continue;
 
       const fieldMap = selectionType.getFields();
 
@@ -225,8 +226,15 @@ export class Generator {
 
     const promises = ctx.selectionTypes.map(async (type) => {
       const selectionTypeName = `${type.name}${suffix}`;
-      const stream = createStream(join(dir, `${toKebabCase(selectionTypeName)}.ts`));
-      const writer = this.createSelectionWriter(type, ctx, stream, this.options);
+      const stream = createStream(
+        join(dir, `${toKebabCase(selectionTypeName)}.ts`),
+      );
+      const writer = this.createSelectionWriter(
+        type,
+        ctx,
+        stream,
+        this.options,
+      );
       emptySelectionNameMap.set(type, writer.emptySelectionName);
       if (writer.defaultSelectionName !== undefined) {
         defaultSelectionNameMap.set(type, writer.defaultSelectionName);
@@ -246,7 +254,7 @@ export class Generator {
             selectionTypeName,
             (type instanceof GraphQLObjectType ||
               type instanceof GraphQLInterfaceType) &&
-              ctx.typesWithParameterizedField.has(type)
+            ctx.typesWithParameterizedField.has(type)
               ? `${type.name}Args`
               : undefined,
             ...this.additionalExportedTypeNamesForSelection(type, ctx),
@@ -254,7 +262,9 @@ export class Generator {
             .filter(Boolean)
             .join(", ");
 
-          stream.write(`export type {${typeExports}} from './${selectionFileName}';\n`);
+          stream.write(
+            `export type {${typeExports}} from './${selectionFileName}';\n`,
+          );
 
           const defaultSelectionName = defaultSelectionNameMap.get(type);
           const valueExports = [
@@ -265,7 +275,9 @@ export class Generator {
             .join(", ");
 
           if (valueExports.length !== 0) {
-            stream.write(`export {${valueExports}} from './${selectionFileName}';\n`);
+            stream.write(
+              `export {${valueExports}} from './${selectionFileName}';\n`,
+            );
           }
         }
         await stream.end();
@@ -301,7 +313,12 @@ export class Generator {
     typeHierarchy: TypeHierarchyGraph,
   ) {
     const stream = createStream(join(this.targetDir, "type-hierarchy.ts"));
-    new TypeHierarchyWriter(schema, typeHierarchy, stream, this.options).write();
+    new TypeHierarchyWriter(
+      schema,
+      typeHierarchy,
+      stream,
+      this.options,
+    ).write();
     await endStream(stream);
   }
 
@@ -319,7 +336,9 @@ export class Generator {
     const stream = createStream(join(dir, "index.ts"));
     const keyword = typeOnly ? "export type" : "export";
     for (const type of types) {
-      stream.write(`${keyword} {${type.name}} from './${toKebabCase(type.name)}';\n`);
+      stream.write(
+        `${keyword} {${type.name}} from './${toKebabCase(type.name)}';\n`,
+      );
     }
     await stream.end();
   }
@@ -332,11 +351,15 @@ export class Generator {
 
   private async writeIndex(schema: GraphQLSchema) {
     const stream = createStream(join(this.targetDir, "index.ts"));
-    stream.write(`export type { GraphQLExecutor, GraphQLSubscriber, Simplify } from "./client-runtime";\n`);
+    stream.write(
+      `export type { GraphQLExecutor, GraphQLSubscriber, Simplify } from "./client-runtime";\n`,
+    );
     stream.write(
       `export { setGraphQLExecutor, setGraphQLSubscriber, execute, subscribe } from "./client-runtime";\n`,
     );
-    stream.write("export type { ImplementationType } from './type-hierarchy';\n");
+    stream.write(
+      "export type { ImplementationType } from './type-hierarchy';\n",
+    );
     stream.write(
       "export { upcastTypes, downcastTypes } from './type-hierarchy';\n",
     );
@@ -393,7 +416,11 @@ export class Generator {
     pkg.exports = exportsMap;
     pkg.types = "./index.ts";
 
-    await writeFile(packageJsonPath, `${JSON.stringify(pkg, null, 2)}\n`, "utf8");
+    await writeFile(
+      packageJsonPath,
+      `${JSON.stringify(pkg, null, 2)}\n`,
+      "utf8",
+    );
   }
 
   private writePackageIndexCode(
@@ -409,8 +436,12 @@ export class Generator {
     // Re-export everything from the generated __generated/index.ts
     // (includes execute, setGraphQLExecutor, ImplementationType, upcastTypes, etc.)
     stream.write(`export * from './__generated/index';\n`);
-    stream.write(`export type { Selection, ExecutableSelection, ShapeOf, Expand, FieldSelection, DirectiveArgs, EnumInputMetadata, EnumInputMetaType, AcceptableVariables, UnresolvedVariables, SchemaType, SchemaField, SchemaTypeCategory, SchemaFieldCategory, FieldOptions } from './dist/index.mjs';\n`);
-    stream.write(`export { FragmentSpread, StringValue, runtimeOf, createSchemaType, resolveRegisteredSchemaType, registerSchemaTypeFactory, SelectionNode, createSelection, ParameterRef, EnumInputMetadataBuilder, TextBuilder, cyrb53 } from './dist/index.mjs';\n`);
+    stream.write(
+      `export type { Selection, ExecutableSelection, ShapeOf, VariablesOf, Expand, FieldSelection, DirectiveArgs, EnumInputMetadata, EnumInputMetaType, AcceptableVariables, UnresolvedVariables, SchemaType, SchemaField, SchemaTypeCategory, SchemaFieldCategory, FieldOptions } from './dist/index.mjs';\n`,
+    );
+    stream.write(
+      `export { FragmentSpread, StringValue, runtimeOf, createSchemaType, resolveRegisteredSchemaType, registerSchemaTypeFactory, SelectionNode, createSelection, ParameterRef, EnumInputMetadataBuilder, TextBuilder, cyrb53 } from './dist/index.mjs';\n`,
+    );
 
     // Import root operation selections for building the gateway object.
     if (queryType instanceof GraphQLObjectType) {
@@ -469,7 +500,10 @@ export class Generator {
     for (const typeName in typeMap) {
       if (typeName.startsWith("__")) continue;
       const type = typeMap[typeName]!;
-      if (type instanceof GraphQLEnumType && !isExcludedTypeName(this.options, type.name)) {
+      if (
+        type instanceof GraphQLEnumType &&
+        !isExcludedTypeName(this.options, type.name)
+      ) {
         return true;
       }
     }
@@ -481,7 +515,10 @@ export class Generator {
     for (const typeName in typeMap) {
       if (typeName.startsWith("__")) continue;
       const type = typeMap[typeName]!;
-      if (type instanceof GraphQLInputObjectType && !isExcludedTypeName(this.options, type.name)) {
+      if (
+        type instanceof GraphQLInputObjectType &&
+        !isExcludedTypeName(this.options, type.name)
+      ) {
         return true;
       }
     }
@@ -504,7 +541,7 @@ export class Generator {
           if (RESERVED_FIELDS.has(fieldName)) {
             throw new Error(
               `Illegal field '${fieldName}' of type '${typeName}', ` +
-              "it's name is protected by '@ptdgrp/typedgql', please change the server-side app",
+                "it's name is protected by '@ptdgrp/typedgql', please change the server-side app",
             );
           }
         }
@@ -522,20 +559,20 @@ export class Generator {
         ) {
           throw new Error(
             `config.idFieldMap contains an illegal key '${typeName}', ` +
-            "that is neither a graphql object type nor graphql interface type",
+              "that is neither a graphql object type nor graphql interface type",
           );
         }
         const idField = type.getFields()[idFieldMap[typeName]!];
         if (!idField) {
           throw new Error(
             `config.idFieldMap['${typeName}'] is illegal, ` +
-            `there is no field named '${idFieldMap[typeName]}' in the type '${typeName}'`,
+              `there is no field named '${idFieldMap[typeName]}' in the type '${typeName}'`,
           );
         }
         if (targetTypeOf(idField.type) !== undefined) {
           throw new Error(
             `config.idFieldMap['${typeName}'] is illegal, ` +
-            `the field '${idFieldMap[typeName]}' of the type '${typeName}' is not scalar`,
+              `the field '${idFieldMap[typeName]}' of the type '${typeName}' is not scalar`,
           );
         }
       }
@@ -552,7 +589,7 @@ export class Generator {
         ) {
           throw new Error(
             `config.defaultSelectionExcludeMap contains an illegal key '${typeName}' ` +
-            "that is neither a graphql object type nor graphql interface type",
+              "that is neither a graphql object type nor graphql interface type",
           );
         }
         const fieldMap = type.getFields();
@@ -567,7 +604,7 @@ export class Generator {
           if (fieldMap[fieldName] === undefined) {
             throw new Error(
               `config.defaultSelectionExcludeMap['${typeName}'][${i}] is illegal, ` +
-              `its value '${fieldName}' is not a field of graphql type '${typeName}'`,
+                `its value '${fieldName}' is not a field of graphql type '${typeName}'`,
             );
           }
         }

@@ -31,7 +31,7 @@ export class TextBuilder {
   private atNewLine = false;
   private readonly scopes: ScopeState[] = [];
 
-  constructor(private readonly indent: string = "\t") { }
+  constructor(private readonly indent: string = "\t") {}
 
   text(value: string): this {
     const scope = this.scopes.at(-1);

@@ -137,7 +137,9 @@ function rewriteLastFieldWithOptions(
   current = current.addField(
     lastField,
     existing?.args as { [key: string]: any } | undefined,
-    existing?.childSelections?.[0] as SelectionImpl<string, object, object> | undefined,
+    existing?.childSelections?.[0] as
+      | SelectionImpl<string, object, object>
+      | undefined,
     optionsValue,
   );
   return current;
@@ -349,7 +351,8 @@ function methodHandler(
 
       // Auto-parameterize unset args
       if (!args) {
-        const argMap = targetSelection.schemaType.ownFields.get(field)?.argGraphQLTypeMap;
+        const argMap =
+          targetSelection.schemaType.ownFields.get(field)?.argGraphQLTypeMap;
         args = argMap ? buildRequiredArgs(argMap) : undefined;
       }
 

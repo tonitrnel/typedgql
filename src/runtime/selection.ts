@@ -23,7 +23,7 @@ export class SelectionImpl<
   T extends object,
   TVariables extends object,
 > implements Selection<E, T, TVariables> {
-  declare readonly [__phantom]: readonly [T, TVariables];
+  declare readonly [__phantom]: readonly [E, T, TVariables];
   readonly [__selectionRuntime]: SelectionRuntime<E> = this;
 
   private _fieldMap?: ReadonlyMap<string, FieldSelection>;
@@ -41,7 +41,7 @@ export class SelectionImpl<
     private readonly _fieldOptionsValue?: FieldOptionsValue,
     private readonly _directive?: string,
     private readonly _directiveArgs?: DirectiveArgs,
-  ) { }
+  ) {}
 
   // ── Last field accessor (for $alias) ──
 
@@ -53,24 +53,29 @@ export class SelectionImpl<
 
   private get _schemaType(): SchemaType<E> {
     return Array.isArray(this._ctx)
-      ? this._ctx[0] as SchemaType<E>
-      : (this._ctx as SelectionImpl<string, object, object>)._schemaType as SchemaType<E>;
+      ? (this._ctx[0] as SchemaType<E>)
+      : ((this._ctx as SelectionImpl<string, object, object>)
+          ._schemaType as SchemaType<E>);
   }
 
   private get _enumInputMetadata(): EnumInputMetadata {
     return Array.isArray(this._ctx)
-      ? this._ctx[1] as EnumInputMetadata
+      ? (this._ctx[1] as EnumInputMetadata)
       : (this._ctx as SelectionImpl<string, object, object>)._enumInputMetadata;
   }
 
   private get _unionItemTypes(): string[] | undefined {
     return Array.isArray(this._ctx)
-      ? (this._ctx.length > 2 && this._ctx[2]?.length ? this._ctx[2] : undefined)
+      ? this._ctx.length > 2 && this._ctx[2]?.length
+        ? this._ctx[2]
+        : undefined
       : (this._ctx as SelectionImpl<string, object, object>)._unionItemTypes;
   }
 
   private get _prev(): SelectionImpl<string, object, object> | undefined {
-    return Array.isArray(this._ctx) ? undefined : this._ctx as SelectionImpl<string, object, object>;
+    return Array.isArray(this._ctx)
+      ? undefined
+      : (this._ctx as SelectionImpl<string, object, object>);
   }
 
   get schemaType(): SchemaType<E> {
@@ -85,10 +90,19 @@ export class SelectionImpl<
     child?: SelectionImpl<string, object, object>,
     optionsValue?: FieldOptionsValue,
   ): F {
-    return new SelectionImpl(this, false, field, args, child, optionsValue) as unknown as F;
+    return new SelectionImpl(
+      this,
+      false,
+      field,
+      args,
+      child,
+      optionsValue,
+    ) as unknown as F;
   }
 
-  removeField<F extends SelectionImpl<string, object, object>>(field: string): F {
+  removeField<F extends SelectionImpl<string, object, object>>(
+    field: string,
+  ): F {
     if (field === "__typename") throw new Error("__typename cannot be removed");
     return new SelectionImpl(this, true, field) as unknown as F;
   }
@@ -99,8 +113,10 @@ export class SelectionImpl<
   ): F {
     let fieldName: string;
     if (fragmentName !== undefined) {
-      if (fragmentName.length === 0) throw new Error("fragmentName cannot be ''");
-      if (fragmentName.startsWith("on ")) throw new Error("fragmentName cannot start with 'on '");
+      if (fragmentName.length === 0)
+        throw new Error("fragmentName cannot be ''");
+      if (fragmentName.startsWith("on "))
+        throw new Error("fragmentName cannot start with 'on '");
       fieldName = `... ${fragmentName}`;
     } else if (
       child._schemaType.name === this._schemaType.name ||
@@ -110,7 +126,13 @@ export class SelectionImpl<
     } else {
       fieldName = `... on ${child._schemaType.name}`;
     }
-    return new SelectionImpl(this, false, fieldName, undefined, child) as unknown as F;
+    return new SelectionImpl(
+      this,
+      false,
+      fieldName,
+      undefined,
+      child,
+    ) as unknown as F;
   }
 
   addDirective<F extends SelectionImpl<string, object, object>>(
@@ -118,7 +140,14 @@ export class SelectionImpl<
     directiveArgs?: DirectiveArgs,
   ): F {
     return new SelectionImpl(
-      this, false, "", undefined, undefined, undefined, directive, directiveArgs,
+      this,
+      false,
+      "",
+      undefined,
+      undefined,
+      undefined,
+      directive,
+      directiveArgs,
     ) as unknown as F;
   }
 
@@ -189,7 +218,11 @@ export class SelectionImpl<
   private _buildFieldMap(): ReadonlyMap<string, FieldSelection> {
     // Collect all nodes in chain order
     const nodes: SelectionImpl<string, object, object>[] = [];
-    for (let n: SelectionImpl<string, object, object> | undefined = this; n; n = n._prev) {
+    for (
+      let n: SelectionImpl<string, object, object> | undefined = this;
+      n;
+      n = n._prev
+    ) {
       if (n._field !== "") nodes.push(n);
     }
 
@@ -201,10 +234,16 @@ export class SelectionImpl<
       const key = n._fieldOptionsValue?.alias ?? n._field;
 
       if (n._field.startsWith("...")) {
-        let children = map.get(key)?.childSelections as SelectionImpl<string, object, object>[] | undefined;
+        let children = map.get(key)?.childSelections as
+          | SelectionImpl<string, object, object>[]
+          | undefined;
         if (!children) {
           children = [];
-          map.set(key, { name: n._field, plural: false, childSelections: children });
+          map.set(key, {
+            name: n._field,
+            plural: false,
+            childSelections: children,
+          });
         }
         children.push(n._child!);
       } else if (n._negative) {
@@ -212,7 +251,8 @@ export class SelectionImpl<
       } else {
         map.set(key, {
           name: n._field,
-          argGraphQLTypes: n._schemaType.fields.get(n._field)?.argGraphQLTypeMap,
+          argGraphQLTypes: n._schemaType.fields.get(n._field)
+            ?.argGraphQLTypeMap,
           args: n._args,
           fieldOptionsValue: n._fieldOptionsValue,
           plural: n._schemaType.fields.get(n._field)?.isPlural ?? false,
@@ -225,7 +265,11 @@ export class SelectionImpl<
 
   private _buildDirectiveMap(): ReadonlyMap<string, DirectiveArgs> {
     const map = new Map<string, DirectiveArgs>();
-    for (let n: SelectionImpl<string, object, object> | undefined = this; n; n = n._prev) {
+    for (
+      let n: SelectionImpl<string, object, object> | undefined = this;
+      n;
+      n = n._prev
+    ) {
       if (n._directive !== undefined && !map.has(n._directive)) {
         map.set(n._directive, n._directiveArgs);
       }
@@ -262,7 +306,9 @@ interface SerializedResult {
   readonly variableTypeMap: ReadonlyMap<string, string>;
 }
 
-function serialize(root: SelectionImpl<string, object, object>): SerializedResult {
+function serialize(
+  root: SelectionImpl<string, object, object>,
+): SerializedResult {
   const writer = new TextBuilder();
   const fragmentWriter = new TextBuilder();
   let ctx = new SerializeContext(writer);
@@ -282,9 +328,12 @@ function serialize(root: SelectionImpl<string, object, object>): SerializedResul
         const runtime = runtimeOf(fragment);
         fragmentWriter.text(`fragment ${name} on ${runtime.schemaType.name} `);
         ctx.acceptDirectives(runtime.directiveMap);
-        fragmentWriter.scope({ type: "block", multiLines: true, suffix: "\n" }, () => {
-          ctx.acceptSelection(fragment);
-        });
+        fragmentWriter.scope(
+          { type: "block", multiLines: true, suffix: "\n" },
+          () => {
+            ctx.acceptSelection(fragment);
+          },
+        );
       }
     }
   }
@@ -297,7 +346,10 @@ function serialize(root: SelectionImpl<string, object, object>): SerializedResul
 }
 
 class SerializeContext {
-  readonly namedFragmentMap = new Map<string, ExecutableSelection<string, object, object>>();
+  readonly namedFragmentMap = new Map<
+    string,
+    ExecutableSelection<string, object, object>
+  >();
   readonly variableTypeMap: Map<string, string>;
 
   constructor(
@@ -333,7 +385,8 @@ class SerializeContext {
           const fragName = name.substring("...".length).trim();
           const old = this.namedFragmentMap.get(fragName);
           for (const c of children) {
-            if (old && old !== c) throw new Error(`Conflict fragment name ${fragName}`);
+            if (old && old !== c)
+              throw new Error(`Conflict fragment name ${fragName}`);
             this.namedFragmentMap.set(fragName, c);
           }
         } else {
@@ -367,8 +420,10 @@ class SerializeContext {
     if (argGraphQLTypeMap) {
       hasField = false;
       for (const argName in args) {
-        if (argGraphQLTypeMap.get(argName) !== undefined) { hasField = true; break; }
-        else console.warn(`Unexpected argument: ${argName}`);
+        if (argGraphQLTypeMap.get(argName) !== undefined) {
+          hasField = true;
+          break;
+        } else console.warn(`Unexpected argument: ${argName}`);
       }
     } else {
       hasField = Object.keys(args).length !== 0;
@@ -387,7 +442,12 @@ class SerializeContext {
               if (typeName !== undefined) {
                 if (arg?.[__parameterRefMarker]) {
                   const ref = arg as ParameterRef<string>;
-                  this.registerVariableType(ref, typeName, false, "field argument");
+                  this.registerVariableType(
+                    ref,
+                    typeName,
+                    false,
+                    "field argument",
+                  );
                   t(`${argName}: $${ref.name}`);
                 } else {
                   t(`${argName}: `);
@@ -404,9 +464,16 @@ class SerializeContext {
               if (arg?.[__parameterRefMarker]) {
                 const ref = arg as ParameterRef<string>;
                 if (!ref.graphqlTypeName) {
-                  throw new Error(`Directive argument '${ref.name}' requires graphqlTypeName`);
+                  throw new Error(
+                    `Directive argument '${ref.name}' requires graphqlTypeName`,
+                  );
                 }
-                this.registerVariableType(ref, ref.graphqlTypeName, false, "directive argument");
+                this.registerVariableType(
+                  ref,
+                  ref.graphqlTypeName,
+                  false,
+                  "directive argument",
+                );
                 t(`${argName}: $${ref.name}`);
               } else {
                 t(`${argName}: `);
@@ -426,10 +493,22 @@ class SerializeContext {
   ) {
     const t = this.writer.text.bind(this.writer);
 
-    if (value == null) { t("null"); return; }
-    if (typeof value === "number") { t(value.toString()); return; }
-    if (typeof value === "string") { t(metaType ? value : JSON.stringify(value)); return; }
-    if (typeof value === "boolean") { t(value ? "true" : "false"); return; }
+    if (value == null) {
+      t("null");
+      return;
+    }
+    if (typeof value === "number") {
+      t(value.toString());
+      return;
+    }
+    if (typeof value === "string") {
+      t(metaType ? value : JSON.stringify(value));
+      return;
+    }
+    if (typeof value === "boolean") {
+      t(value ? "true" : "false");
+      return;
+    }
     if (value?.[__parameterRefMarker]) {
       const ref = value as ParameterRef<string>;
       if (!graphqlTypeName && !ref.graphqlTypeName) {
@@ -447,7 +526,8 @@ class SerializeContext {
     }
 
     if (Array.isArray(value) || value instanceof Set) {
-      const elementGraphQLTypeName = SerializeContext.elementTypeName(graphqlTypeName);
+      const elementGraphQLTypeName =
+        SerializeContext.elementTypeName(graphqlTypeName);
       this.writer.scope({ type: "array" }, () => {
         for (const e of value) {
           this.writer.separator(", ");
@@ -489,9 +569,13 @@ class SerializeContext {
     allowImplicitFromRef = false,
     context = "argument",
   ) {
-    const typeName = expectedTypeName ?? (allowImplicitFromRef ? ref.graphqlTypeName : undefined);
+    const typeName =
+      expectedTypeName ??
+      (allowImplicitFromRef ? ref.graphqlTypeName : undefined);
     if (!typeName) {
-      throw new Error(`Directive argument '${ref.name}' requires graphqlTypeName`);
+      throw new Error(
+        `Directive argument '${ref.name}' requires graphqlTypeName`,
+      );
     }
     if (ref.graphqlTypeName && ref.graphqlTypeName !== typeName) {
       throw new Error(
@@ -515,7 +599,9 @@ class SerializeContext {
     return meta.get(typeName.split(/\[|\]|!/).join(""));
   }
 
-  private static elementTypeName(typeName: string | undefined): string | undefined {
+  private static elementTypeName(
+    typeName: string | undefined,
+  ): string | undefined {
     if (!typeName) return undefined;
     let normalized = typeName.trim();
     // Strip non-null marker before list extraction to get element type.

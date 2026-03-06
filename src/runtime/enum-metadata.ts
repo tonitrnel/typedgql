@@ -74,7 +74,12 @@ export class EnumInputMetadataBuilder {
       if (rawFields) {
         fields = new Map();
         fieldGraphQLTypeMap = new Map();
-        for (const { name: fieldName, typeName, graphqlTypeName, isLeaf } of rawFields) {
+        for (const {
+          name: fieldName,
+          typeName,
+          graphqlTypeName,
+          isLeaf,
+        } of rawFields) {
           let resolved: EnumInputMetaType | undefined;
           const treatAsLeaf =
             isLeaf || EnumInputMetadataBuilder.BUILTIN_SCALARS.has(typeName);

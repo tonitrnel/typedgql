@@ -23,12 +23,15 @@ export class FieldOptions<
     private readonly _alias?: string,
     private readonly _directive?: string,
     private readonly _directiveArgs?: object,
-  ) { }
+  ) {}
 
   alias<XAlias extends string>(
     alias: XAlias,
   ): FieldOptions<XAlias, TDirectives, TDirectiveVariables> {
-    return new FieldOptions<XAlias, TDirectives, TDirectiveVariables>(this, alias);
+    return new FieldOptions<XAlias, TDirectives, TDirectiveVariables>(
+      this,
+      alias,
+    );
   }
 
   directive<XDirective extends string, XArgs extends DirectiveArgs = {}>(
@@ -40,7 +43,9 @@ export class FieldOptions<
     TDirectiveVariables & UnresolvedVariables<XArgs, Record<keyof XArgs, any>>
   > {
     if (directive.startsWith("@")) {
-      throw new Error("directive name should not start with '@', it will be prepended automatically");
+      throw new Error(
+        "directive name should not start with '@', it will be prepended automatically",
+      );
     }
     return new FieldOptions<
       TAlias,
@@ -57,7 +62,11 @@ export class FieldOptions<
     let alias: string | undefined;
     const directives = new Map<string, DirectiveArgs>();
 
-    for (let node: FieldOptions<string, any, any> | undefined = this; node; node = node._prev) {
+    for (
+      let node: FieldOptions<string, any, any> | undefined = this;
+      node;
+      node = node._prev
+    ) {
       if (node._alias !== undefined && alias === undefined) {
         alias = node._alias;
       }
@@ -75,7 +84,9 @@ export class FieldOptions<
 }
 
 export function createFieldOptions<TAlias extends string>(): FieldOptions<
-  TAlias, {}, {}
+  TAlias,
+  {},
+  {}
 > {
   return new FieldOptions<TAlias, {}, {}>();
 }

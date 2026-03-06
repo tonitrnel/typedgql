@@ -4,7 +4,9 @@
  * 1. If object is used by field arguments, don't specify the graphqlTypeName
  * 2. If object is used by directive arguments, graphqlTypeName is required
  */
-export const __parameterRefMarker: unique symbol = Symbol("__parameterRefMarker");
+export const __parameterRefMarker: unique symbol = Symbol(
+  "__parameterRefMarker",
+);
 
 export class ParameterRef<TName extends string> {
   readonly [__parameterRefMarker] = true;
