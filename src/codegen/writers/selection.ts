@@ -113,7 +113,9 @@ export class SelectionWriter extends Writer {
     }
 
     const shared: GraphQLFieldMap<any, any> = {};
-    for (const [fieldName, field] of Object.entries(memberTypes[0]!.getFields())) {
+    for (const [fieldName, field] of Object.entries(
+      memberTypes[0]!.getFields(),
+    )) {
       if (fieldCounts.get(fieldName) === memberCount) {
         shared[fieldName] = field;
       }
@@ -169,7 +171,9 @@ export class SelectionWriter extends Writer {
     return !excludes?.includes(fieldName);
   }
 
-  private fieldCategory(field: GraphQLField<unknown, unknown>): FieldCategory | undefined {
+  private fieldCategory(
+    field: GraphQLField<unknown, unknown>,
+  ): FieldCategory | undefined {
     const fieldCoreType =
       field.type instanceof GraphQLNonNull ? field.type.ofType : field.type;
     if (this.ctx.embeddedTypes.has(fieldCoreType)) return "SCALAR";
@@ -215,8 +219,13 @@ export class SelectionWriter extends Writer {
 
     imports.useMapped("createSchemaType");
     imports.useMapped("registerSchemaTypeFactory");
-    const superTypesForResolve = this.ctx.typeHierarchy.upcastTypeMap.get(this.modelType);
-    if (isOperationRootTypeName(this.modelType.name) || superTypesForResolve?.size) {
+    const superTypesForResolve = this.ctx.typeHierarchy.upcastTypeMap.get(
+      this.modelType,
+    );
+    if (
+      isOperationRootTypeName(this.modelType.name) ||
+      superTypesForResolve?.size
+    ) {
       imports.useMapped("resolveRegisteredSchemaType");
     }
     if (isOperationRootTypeName(this.modelType.name)) {
@@ -315,7 +324,7 @@ export class SelectionWriter extends Writer {
   private writeSelectionInterfaceHeader() {
     const superSelection = this.superSelectionTypeName(this.modelType);
     this.text(
-      `export interface ${this.selectionTypeName}<T extends object, TVariables extends object, TLastField extends string = never> extends ${superSelection}<'${this.modelType.name}', T, TVariables> `,
+      `export interface ${this.selectionTypeName}<T extends object = {}, TVariables extends object = {}, TLastField extends string = never> extends ${superSelection}<'${this.modelType.name}', T, TVariables> `,
     );
   }
 
@@ -348,12 +357,16 @@ export class SelectionWriter extends Writer {
     // `$on` models GraphQL fragment spread behavior:
     // - exact type match: merge child fields directly
     // - polymorphic match: add discriminated __typename union branch
-    t(`\n$on<XName extends ${fragmentTypeName}, X extends object, XVariables extends object>`);
+    t(
+      `\n$on<XName extends ${fragmentTypeName}, X extends object, XVariables extends object>`,
+    );
     this.scope({ type: "parameters", multiLines: !isUnion }, () => {
       t(`child: ${childParamType}`);
       if (!isUnion) {
         this.separator(", ");
-        t("fragmentName?: string // undefined: inline fragment; otherwise, real fragment");
+        t(
+          "fragmentName?: string // undefined: inline fragment; otherwise, real fragment",
+        );
       }
     });
     t(`: ${this.selectionTypeName}`);
@@ -755,7 +768,9 @@ export class SelectionWriter extends Writer {
       t(this.schemaTypeCategory(this.modelType));
       this.separator(", ");
       this.scope({ type: "array" }, () => {
-        const upcastTypes = this.ctx.typeHierarchy.upcastTypeMap.get(this.modelType);
+        const upcastTypes = this.ctx.typeHierarchy.upcastTypeMap.get(
+          this.modelType,
+        );
         if (upcastTypes !== undefined) {
           for (const upcastType of upcastTypes) {
             this.separator(", ");
@@ -795,18 +810,15 @@ export class SelectionWriter extends Writer {
       if (args !== undefined) {
         this.separator(", ");
         t("argGraphQLTypeMap: ");
-        this.scope(
-          { type: "block", multiLines: args.length > 1 },
-          () => {
-            for (const arg of args) {
-              this.separator(", ");
-              t(arg.name);
-              t(": '");
-              this.gqlTypeRef(arg.type);
-              t("'");
-            }
-          },
-        );
+        this.scope({ type: "block", multiLines: args.length > 1 }, () => {
+          for (const arg of args) {
+            this.separator(", ");
+            t(arg.name);
+            t(": '");
+            this.gqlTypeRef(arg.type);
+            t("'");
+          }
+        });
       }
       if (targetType !== undefined) {
         this.separator(", ");
