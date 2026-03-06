@@ -1,5 +1,7 @@
 # @ptdgrp/typedgql
 
+[![Release](https://github.com/tonitrnel/typedgql/actions/workflows/publish-npm.yml/badge.svg)](https://github.com/tonitrnel/typedgql/actions/workflows/publish-npm.yml)
+
 `typedgql` is a TypeScript-first GraphQL client codegen + runtime library focused on end-to-end type safety and a fluent query-building experience.
 
 For Chinese documentation, see [README.zh-CN.md](./README.zh-CN.md).
