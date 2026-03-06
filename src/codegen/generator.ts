@@ -99,7 +99,7 @@ export class Generator {
     const embeddedTypes = new Set<GraphQLType>();
     const idFieldMap = new Map<
       GraphQLObjectType | GraphQLInterfaceType | GraphQLUnionType,
-      GraphQLField<any, any>
+      GraphQLField<unknown, unknown>
     >();
     const triggerableTypes = new Set<GraphQLType>();
     const typesWithParameterizedField = new Set<
@@ -173,7 +173,7 @@ export class Generator {
       typesWithParameterizedField,
     };
 
-    const promises: Promise<any>[] = [];
+    const promises: Promise<void>[] = [];
 
     if (selectionTypes.length !== 0) {
       await mkdir(join(this.targetDir, "selections"), { recursive: true });
@@ -352,7 +352,9 @@ export class Generator {
   private async writeIndex(schema: GraphQLSchema, ctx: SelectionContext) {
     const stream = createStream(join(this.targetDir, "index.ts"));
     const selectionSuffix = this.options.selectionSuffix ?? "Selection";
-    stream.write(`import type { Selection } from "../dist/index.mjs";\n`);
+    stream.write(
+      `import type { Selection, ExecutableSelection, SchemaType, ShapeOf, VariablesOf } from "../dist/index.mjs";\n`,
+    );
     stream.write(
       `import { FragmentRef, createSelection, resolveRegisteredSchemaType } from "../dist/index.mjs";\n`,
     );
@@ -377,36 +379,27 @@ export class Generator {
     stream.write(
       "export { upcastTypes, downcastTypes } from './type-hierarchy';\n",
     );
-    const fragmentTypeNames =
-      ctx.selectionTypes.length === 0
-        ? "never"
-        : ctx.selectionTypes.map((t) => `'${t.name}'`).join(" | ");
     stream.write(
-      `export type FragmentTypeName = ${fragmentTypeNames};\n`,
+      `export interface FragmentSelectionMap<T extends object = {}, TVariables extends object = {}> {\n`,
     );
-    stream.write(
-      `export type FragmentSelectionFor<E extends FragmentTypeName, T extends object = {}, TVariables extends object = {}> =\n`,
-    );
-    if (ctx.selectionTypes.length === 0) {
-      stream.write("  never;\n");
-    } else {
-      for (const type of ctx.selectionTypes) {
-        const selectionTypeName = `${type.name}${selectionSuffix}`;
-        stream.write(
-          `  E extends '${type.name}' ? ${selectionTypeName}<T, TVariables> :\n`,
-        );
-      }
-      stream.write("  never;\n");
+    for (const type of ctx.selectionTypes) {
+      const selectionTypeName = `${type.name}${selectionSuffix}`;
+      stream.write(`  '${type.name}': ${selectionTypeName}<T, TVariables>;\n`);
     }
+    stream.write("}\n");
     stream.write(
-      `\nexport function fragment$<E extends FragmentTypeName, T extends object, TVariables extends object>(\n`,
+      `export type FragmentTypeName = keyof FragmentSelectionMap;\n`,
+    );
+    stream.write(
+      `export type FragmentSelectionFor<E extends FragmentTypeName, T extends object = {}, TVariables extends object = {}> = FragmentSelectionMap<T, TVariables>[E];\n`,
+    );
+    stream.write(
+      `\nexport function fragment$<const E extends FragmentTypeName, S extends FragmentSelectionFor<E, object, object>>(\n`,
     );
     stream.write(`  typeName: E,\n`);
-    stream.write(
-      `  builder: (it: FragmentSelectionFor<E, {}, {}>) => FragmentSelectionFor<E, T, TVariables>,\n`,
-    );
+    stream.write(`  builder: (it: FragmentSelectionFor<E, {}, {}>) => S,\n`);
     stream.write(`  fragmentName?: string,\n`);
-    stream.write(`): FragmentRef<string, E, T, TVariables> {\n`);
+    stream.write(`): FragmentRef<string, E, ShapeOf<S>, VariablesOf<S>> {\n`);
     stream.write(
       `  const schemaType = resolveRegisteredSchemaType(typeName);\n`,
     );
@@ -416,16 +409,19 @@ export class Generator {
     );
     stream.write(`  }\n`);
     stream.write(`  const base = createSelection<E, Selection<E, {}, {}>>(\n`);
-    stream.write(`    schemaType as any,\n`);
+    stream.write(`    schemaType as SchemaType<E>,\n`);
     stream.write(`    ENUM_INPUT_METADATA,\n`);
     stream.write(`    undefined,\n`);
     stream.write(`  );\n`);
     stream.write(
       `  const selection = builder(base as unknown as FragmentSelectionFor<E, {}, {}>);\n`,
     );
+    stream.write(`  return new FragmentRef(\n`);
+    stream.write(`    fragmentName ?? \`\${typeName}Fragment\`,\n`);
     stream.write(
-      `  return new FragmentRef(fragmentName ?? \`\${typeName}Fragment\`, selection as any);\n`,
+      `    selection as unknown as ExecutableSelection<E, ShapeOf<S>, VariablesOf<S>>,\n`,
     );
+    stream.write(`  );\n`);
     stream.write(`}\n`);
     await endStream(stream);
   }

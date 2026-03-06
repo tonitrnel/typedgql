@@ -245,28 +245,38 @@ export class SelectionWriter extends Writer {
 
     const importedConcreteSelectionNames = new Set<string>();
     const importedConcreteSelectionModules = new Set<string>();
+    const ensureConcreteSelectionTypeImported = (
+      type: GraphQLObjectType | GraphQLInterfaceType | GraphQLUnionType,
+    ) => {
+      if (type === this.modelType) return;
+      const selectionTypeName = this.selectionTypeNameForType(type);
+      const selectionModule = `./${toKebabCase(selectionTypeName)}`;
+      if (!importedConcreteSelectionNames.has(selectionTypeName)) {
+        importedConcreteSelectionNames.add(selectionTypeName);
+        imports.useType(selectionModule, selectionTypeName);
+      }
+      if (!importedConcreteSelectionModules.has(selectionModule)) {
+        importedConcreteSelectionModules.add(selectionModule);
+        // Keep module side effects so each generated selection file can register its schema factory.
+        imports.useSideEffect(selectionModule);
+      }
+    };
+
     for (const field of Object.values(this.fieldMap)) {
       const targetType = targetTypeOf(field.type);
       if (targetType === undefined || targetType === this.modelType) {
         continue;
       }
-      const selectionTypeName = this.selectionTypeNameForType(targetType);
-      const selectionModule = `./${toKebabCase(selectionTypeName)}`;
-      if (importedConcreteSelectionNames.has(selectionTypeName)) {
-        if (!importedConcreteSelectionModules.has(selectionModule)) {
-          importedConcreteSelectionModules.add(selectionModule);
-          // Keep module side effects so each generated selection file can register its schema factory.
-          imports.useSideEffect(selectionModule);
-        }
-        continue;
+      ensureConcreteSelectionTypeImported(targetType);
+    }
+
+    const downcasts = this.ctx.typeHierarchy.downcastTypeMap.get(
+      this.modelType,
+    );
+    if (downcasts) {
+      for (const downcast of downcasts) {
+        ensureConcreteSelectionTypeImported(downcast);
       }
-      importedConcreteSelectionNames.add(selectionTypeName);
-      imports.useType(selectionModule, selectionTypeName);
-      importedConcreteSelectionModules.add(selectionModule);
-      // Import both the type and the module itself:
-      // - `import type` is for TS signatures
-      // - side-effect import ensures registration code runs at module init time
-      imports.useSideEffect(selectionModule);
     }
 
     const upcastTypes = this.ctx.typeHierarchy.upcastTypeMap.get(
@@ -351,14 +361,16 @@ export class SelectionWriter extends Writer {
 
     const t = this.text.bind(this);
     const modelName = this.modelType.name;
-    const selectionSuperType = this.superSelectionTypeName(this.modelType);
-    const fragmentTypeName = `ImplementationType<'${modelName}'>`;
-    const resultDataType = `XName extends '${modelName}' ?\nT & X :\nWithTypeName<T, ${fragmentTypeName}> & (WithTypeName<X, ImplementationType<XName>> | {__typename: Exclude<${fragmentTypeName}, ImplementationType<XName>>})`;
+    const selfSelectionType = this.selectionTypeName;
+    const fragmentTypeName = this.fragmentTypeNameType();
+    const inlineSelectionFor = (xName: string, data: string, vars: string) =>
+      this.fragmentSelectionTypeForModel(xName, data, vars);
+    const mergedDataType = `XName extends '${modelName}' ?\nT & X :\nWithTypeName<T, ${fragmentTypeName}> & (WithTypeName<X, ImplementationType<XName>> | {__typename: Exclude<${fragmentTypeName}, ImplementationType<XName>>})`;
 
     t("\n$on<X extends object, XVariables extends object>");
     this.scope({ type: "parameters", multiLines: true }, () => {
       t(
-        `builder: (it: ${selectionSuperType}<'${modelName}', {}, {}>) => ${selectionSuperType}<'${modelName}', X, XVariables>`,
+        `builder: (it: ${selfSelectionType}<{}, {}>) => ${selfSelectionType}<X, XVariables>`,
       );
     });
     t(`: ${this.selectionTypeName}`);
@@ -376,12 +388,12 @@ export class SelectionWriter extends Writer {
       t("typeName: XName");
       this.separator(", ");
       t(
-        `builder: (it: ${selectionSuperType}<XName, {}, {}>) => ${selectionSuperType}<XName, X, XVariables>`,
+        `builder: (it: ${inlineSelectionFor("XName", "{}", "{}")}) => ${inlineSelectionFor("XName", "X", "XVariables")}`,
       );
     });
     t(`: ${this.selectionTypeName}`);
     this.scope({ type: "generic", multiLines: true }, () => {
-      t(resultDataType);
+      t(mergedDataType);
       this.separator(", ");
       t("TVariables & XVariables");
     });
@@ -395,11 +407,48 @@ export class SelectionWriter extends Writer {
     });
     t(`: ${this.selectionTypeName}`);
     this.scope({ type: "generic", multiLines: true }, () => {
-      t(resultDataType);
+      t(mergedDataType);
       this.separator(", ");
       t("TVariables & XVariables");
     });
     t(";\n");
+  }
+
+  private fragmentTypeNameType(): string {
+    return `keyof ${this.fragmentSelectionMapType("{}", "{}")}`;
+  }
+
+  private fragmentSelectionTypeForModel(
+    xNameRef: string,
+    dataType: string,
+    variableType: string,
+  ): string {
+    return `${this.fragmentSelectionMapType(dataType, variableType)}[${xNameRef}]`;
+  }
+
+  private fragmentSelectionMapType(
+    dataType: string,
+    variableType: string,
+  ): string {
+    const entries: string[] = [];
+    const selectionTypeByName = new Map<string, string>();
+    selectionTypeByName.set(this.modelType.name, this.selectionTypeName);
+
+    const downcasts = this.ctx.typeHierarchy.downcastTypeMap.get(
+      this.modelType,
+    );
+    if (downcasts) {
+      for (const t of downcasts) {
+        selectionTypeByName.set(t.name, this.selectionTypeNameForType(t));
+      }
+    }
+
+    for (const [typeName, selectionTypeName] of selectionTypeByName) {
+      entries.push(
+        `'${typeName}': ${selectionTypeName}<${dataType}, ${variableType}>`,
+      );
+    }
+    return `{${entries.join("; ")}}`;
   }
 
   private writeDirectiveBuiltins() {
@@ -741,7 +790,9 @@ export class SelectionWriter extends Writer {
     t("\nexport function ");
     t(emptySelectionName);
     t("<T extends object = {}, TVariables extends object = {}>(");
-    t(`builder: (it: ${this.selectionTypeName}<{}, {}>) => ${this.selectionTypeName}<T, TVariables>`);
+    t(
+      `builder: (it: ${this.selectionTypeName}<{}, {}>) => ${this.selectionTypeName}<T, TVariables>`,
+    );
     t(", operationName?: string");
     t("): ");
     t(this.selectionTypeName);
