@@ -44,9 +44,13 @@ describe("Runtime + codegen integration (non-relay)", () => {
       query$: any;
     };
 
-    const selection = mod.query$
-      .users({ limit: 2 }, (u: any) => u.id.email)
-      .post({ id: "p1" }, (p: any) => p.id.title.author((a: any) => a.displayName));
+    const selection = mod.query$((q: any) =>
+      q
+        .users({ limit: 2 }, (u: any) => u.id.email)
+        .post({ id: "p1" }, (p: any) =>
+          p.id.title.author((a: any) => a.displayName),
+        ),
+    );
 
     expect(normalizeGql(selection.toString())).toBe(
       normalizeGql(`

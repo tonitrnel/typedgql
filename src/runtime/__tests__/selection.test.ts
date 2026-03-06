@@ -31,7 +31,7 @@ describe("selection serialization and guards", () => {
     );
   });
 
-  it("throws when named fragment has conflicting selections", () => {
+  it("auto-renames conflicting named fragments", () => {
     const queryType = createSchemaType("SelectionQueryB", "OBJECT", [], ["id"]);
     const nodeType = createSchemaType("SelectionNodeB", "OBJECT", [], [
       "id",
@@ -44,9 +44,39 @@ describe("selection serialization and guards", () => {
       .addEmbeddable(s1, "shared")
       .addEmbeddable(s2, "shared ");
 
-    expect(() => withFragments.toFragmentString()).toThrow(
-      "Conflict fragment name shared",
-    );
+    const text = withFragments.toString();
+    const fragmentText = withFragments.toFragmentString();
+    expect(text).toContain("... shared");
+    expect(text).toContain("... shared_1");
+    expect(fragmentText).toContain("fragment shared on SelectionNodeB");
+    expect(fragmentText).toContain("fragment shared_1 on SelectionNodeB");
+  });
+
+  it("reuses runtime fragment names and increments suffix when multiple conflicts exist", () => {
+    const queryType = createSchemaType("SelectionQueryB2", "OBJECT", [], ["id"]);
+    const nodeType = createSchemaType("SelectionNodeB2", "OBJECT", [], [
+      "id",
+      "name",
+      "email",
+    ]);
+    const root = createRoot(queryType);
+    const s1 = createRoot(nodeType).addField("id");
+    const s2 = createRoot(nodeType).addField("name");
+    const s3 = createRoot(nodeType).addField("email");
+
+    const withFragments = root
+      .addEmbeddable(s1, "shared")
+      .addEmbeddable(s2, "shared")
+      .addEmbeddable(s3, "shared")
+      .addEmbeddable(s3, "shared");
+
+    const text = withFragments.toString();
+    const fragmentText = withFragments.toFragmentString();
+    expect(text).toContain("... shared");
+    expect(text).toContain("... shared_1");
+    expect(text).toContain("... shared_2");
+    expect(text.split("... shared_2").length - 1).toBe(2);
+    expect(fragmentText).toContain("fragment shared_2 on SelectionNodeB2");
   });
 
   it("flattens inline embeddable selections in current scope", () => {
@@ -180,6 +210,17 @@ describe("selection serialization and guards", () => {
     expect(root.variableTypeMap.get("cond")).toBe("Boolean!");
   });
 
+  it("throws for directive parameter refs without known graphql type", () => {
+    const queryType = createSchemaType("SelectionQueryDirUnknownType", "OBJECT", [], ["id"]);
+    const root = createRoot(queryType)
+      .addField("id")
+      .addDirective("custom", { v: ParameterRef.of("v") });
+
+    expect(() => root.toString()).toThrow(
+      "Directive argument 'v' requires graphqlTypeName",
+    );
+  });
+
   it("serializes Map/Set/StringValue literals in directive args", () => {
     const queryType = createSchemaType("SelectionQueryF", "OBJECT", [], ["id"]);
     const root = createRoot(queryType)
@@ -258,6 +299,23 @@ describe("selection serialization and guards", () => {
     expect(text).toContain("2: 3");
   });
 
+  it("serializes null literals in args and directives", () => {
+    const queryType = createSchemaType("SelectionQueryNullLiteral", "OBJECT", [], [
+      {
+        name: "search",
+        category: "SCALAR",
+        argGraphQLTypeMap: { filter: "String" },
+      },
+    ]);
+    const root = createRoot(queryType)
+      .addField("search", { filter: null })
+      .addDirective("meta", { payload: null });
+
+    const text = root.toString();
+    expect(text).toContain("filter: null");
+    expect(text).toContain("payload: null");
+  });
+
   it("throws when findFieldByName sees duplicate matches", () => {
     const rootType = createSchemaType("SelectionQueryH", "OBJECT", [], ["id"]);
     const childType = createSchemaType("SelectionNodeH", "OBJECT", [], ["id"]);
@@ -289,5 +347,21 @@ describe("selection serialization and guards", () => {
 
     const nested = root.findField("name");
     expect(nested?.name).toBe("name");
+  });
+
+  it("keeps inline spread when child selection comes from a union root chain", () => {
+    const queryType = createSchemaType("SelectionUnionHost", "OBJECT", [], ["id"]);
+    const unionType = createSchemaType("SelectionUnionNode", "OBJECT", [], ["name"]);
+    const unionRoot = new SelectionImpl(
+      [unionType, new EnumInputMetadataBuilder().build(), ["User", "Page"]],
+      false,
+      "",
+    );
+    const unionChild = unionRoot.addField("name");
+    const host = createRoot(queryType).addEmbeddable(unionChild);
+
+    // Same-type/union embeddables are serialized inline, not as explicit spread.
+    expect(host.toString()).not.toContain("...");
+    expect(host.toString()).toContain("name");
   });
 });

@@ -27,7 +27,9 @@ input UserLookupInput @oneOf {
 
 type Query {
   post(id: ID!): Post
+  node(id: ID!): Node
   users(limit: Int): [User!]!
+  profiles(handles: [String!]!): [Profile!]!
   searchUsers(filter: UserFilterInput!, tags: [String!], role: Role): [User!]!
   lookupUser(input: UserLookupInput!): User
   viewer: User!
@@ -48,8 +50,28 @@ type Post {
   author: User!
 }
 
-type User {
+interface Node {
   id: ID!
+}
+
+interface Profile {
+  handle: String!
+}
+
+type CountConnection {
+  count: Int!
+}
+
+type User implements Node & Profile {
+  id: ID!
+  handle: String!
   name: String!
   email: String!
+  friends: CountConnection!
+}
+
+type Page implements Profile {
+  id: ID!
+  handle: String!
+  likers: CountConnection!
 }

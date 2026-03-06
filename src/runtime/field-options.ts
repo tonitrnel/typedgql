@@ -83,10 +83,10 @@ export class FieldOptions<
   }
 }
 
-export function createFieldOptions<TAlias extends string>(): FieldOptions<
+export const createFieldOptions = <TAlias extends string>(): FieldOptions<
   TAlias,
   {},
   {}
-> {
+> => {
   return new FieldOptions<TAlias, {}, {}>();
-}
+};

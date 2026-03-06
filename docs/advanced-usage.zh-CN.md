@@ -9,7 +9,7 @@
 ## 1. Subscription 用法
 
 前提：你的 Schema 存在 `Subscription` 根类型。  
-生成后，`G` 会包含 `subscription()` 方法（如果 schema 没有 subscription 根类型，则不会生成）。
+生成后，`G` 会包含 `subscription(...)` 方法（如果 schema 没有 subscription 根类型，则不会生成）。
 
 ### 1.1 注册 subscriber
 
@@ -28,8 +28,8 @@ setGraphQLSubscriber(async (request, variables) => {
 ```ts
 import { G, subscribe } from "@ptdgrp/typedgql";
 
-const selection = G.subscription().postCreated((post) =>
-  post.id.title.author((a) => a.id.name),
+const selection = G.subscription((s) =>
+  s.postCreated((post) => post.id.title.author((a) => a.id.name)),
 );
 
 for await (const payload of subscribe(selection)) {
@@ -63,17 +63,20 @@ subscription {
 - `$directive(name, args?)`
 - `$alias(alias)`
 - `$omit(...fields)`
-- `$on(child, fragmentName?)`（非 root selection）
+- `$on(builder)` / `$on(typeName, builder)`（非 root selection，inline fragment）
+- `$use(fragment)`（非 root selection，named fragment）
 
 注意：`$include/$skip/$directive` 在“有最近字段”时是字段级；否则是 selection 级。
 
 ### 2.1 字段级 `$include` / `$skip`
 
 ```ts
-const selection = G.query().post((p) =>
-  p.id
-    .title.$include(true)
-    .content.$skip(false),
+const selection = G.query((q) =>
+  q.post((p) =>
+    p.id
+      .title.$include(true)
+      .content.$skip(false),
+  ),
 );
 ```
 
@@ -92,9 +95,9 @@ query {
 ### 2.2 通用 `$directive(name, args?)`
 
 ```ts
-const selection = G.query()
-  .$directive("cacheControl", { maxAge: 60 })
-  .posts((p) => p.id.title);
+const selection = G.query((q) =>
+  q.$directive("cacheControl", { maxAge: 60 }).posts((p) => p.id.title),
+);
 ```
 
 GraphQL 参考（示意）：
@@ -111,8 +114,8 @@ query @cacheControl(maxAge: 60) {
 ### 2.3 `$alias(alias)`
 
 ```ts
-const selection = G.query().post((p) =>
-  p.title.$alias("postTitle"),
+const selection = G.query((q) =>
+  q.post((p) => p.title.$alias("postTitle")),
 );
 ```
 
@@ -129,8 +132,8 @@ query {
 ### 2.4 `$omit(...fields)`
 
 ```ts
-const selection = G.query().post((p) =>
-  p.id.title.content.$omit("content"),
+const selection = G.query((q) =>
+  q.post((p) => p.id.title.content.$omit("content")),
 );
 ```
 
@@ -145,16 +148,15 @@ query {
 }
 ```
 
-### 2.5 `$on(...)`（inline fragment / named fragment）
+### 2.5 `$on(...)` 与 `$use(...)`
 
 以下示例为“联合类型/接口类型”的伪代码，具体类型名与入口以你的生成结果为准：
 
 ```ts
-const selection = G.query().search((s) =>
-  s.$on(
-    G.query().searchResultUser((u) => u.id.name),
-    "userFields",
-  ),
+const userFields = G.fragment("User", (u) => u.id.name, "userFields");
+
+const selection = G.query((q) =>
+  q.search((s) => s.$on("User", (u) => u.id.name).$use(userFields)),
 );
 ```
 
@@ -178,16 +180,15 @@ fragment userFields on User {
 推荐模式：selection 与变量值解耦。
 
 ```ts
-const selection = G.query().post((p) => p.id.title);
+const selection = G.query((q) => q.post((p) => p.id.title));
 await execute(selection, { variables: { id: "p2" } });
 ```
 
 你也可以显式写参数占位：
 
 ```ts
-const selection = G.query().post(
-  { id: ParameterRef.of("postId") },
-  (p) => p.id.title,
+const selection = G.query((q) =>
+  q.post({ id: ParameterRef.of("postId") }, (p) => p.id.title),
 );
 await execute(selection, { variables: { postId: "p2" } });
 ```

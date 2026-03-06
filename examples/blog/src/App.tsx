@@ -1,10 +1,5 @@
 import React, { useState, useEffect } from "react";
-import {
-  query$,
-  mutation$,
-  execute,
-  setGraphQLExecutor,
-} from "@ptdgrp/typedgql";
+import { G, execute, setGraphQLExecutor } from "@ptdgrp/typedgql";
 import { executeGraphQL } from "./executor";
 
 // Intercept queries for testing display
@@ -32,13 +27,15 @@ export default function App() {
 
     try {
       // 1. Fetch Posts
-      const postsQuery = query$.posts((post) =>
-        post.id.title.publishedAt
-          .author((author) => author.id.name)
-          .comments((comment) =>
-            comment.id.body.createdAt.author((a) => a.id.name),
-          )
-          .tags((tag) => tag.id.name),
+      const postsQuery = G.query((q) =>
+        q.posts((post) =>
+          post.id.title.publishedAt
+            .author((author) => author.id.name)
+            .comments((comment) =>
+              comment.id.body.createdAt.author((a) => a.id.name),
+            )
+            .tags((tag) => tag.id.name),
+        ),
       );
       const data1 = await execute(postsQuery);
       testLogs.push({
@@ -49,10 +46,12 @@ export default function App() {
       });
 
       // 2. Fetch Single Post
-      const postQuery = query$.post((post) =>
-        post.id.title.content
-          .author((author) => author.id.name)
-          .tags((tag) => tag.name),
+      const postQuery = G.query((q) =>
+        q.post((post) =>
+          post.id.title.content
+            .author((author) => author.id.name)
+            .tags((tag) => tag.name),
+        ),
       );
       const data2 = await execute(postQuery, { variables: { id: "p2" } });
       testLogs.push({
@@ -63,8 +62,8 @@ export default function App() {
       });
 
       // 3. Create Post
-      const createPostMut = mutation$.createPost((post) =>
-        post.id.title.publishedAt.author((a) => a.name),
+      const createPostMut = G.mutation((m) =>
+        m.createPost((post) => post.id.title.publishedAt.author((a) => a.name)),
       );
       const createInput = {
         title: "Introduction to typedgql",
@@ -83,8 +82,10 @@ export default function App() {
       });
 
       // 4. Add Comment
-      const addCommentMut = mutation$.addComment((comment) =>
-        comment.id.body.createdAt.author((a) => a.id.name),
+      const addCommentMut = G.mutation((m) =>
+        m.addComment((comment) =>
+          comment.id.body.createdAt.author((a) => a.id.name),
+        ),
       );
       const data4 = await execute(addCommentMut, {
         variables: {

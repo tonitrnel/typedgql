@@ -1,7 +1,7 @@
 import type { EnumInputMetadata, EnumInputMetaType } from "./enum-metadata";
 import type { SchemaType } from "./schema";
 import type { FieldOptionsValue } from "./field-options";
-import { __phantom, __selectionRuntime, runtimeOf } from "./types";
+import { __phantom, __runtime, runtimeOf } from "./types";
 import type {
   Selection,
   ExecutableSelection,
@@ -10,7 +10,7 @@ import type {
   DirectiveArgs,
 } from "./types";
 import { StringValue } from "./types";
-import { ParameterRef, __parameterRefMarker } from "./parameter";
+import { ParameterRef, __marker } from "./parameter";
 import { TextBuilder } from "./text-builder";
 
 // ─── SelectionImpl ─────────────────────────────────────────────────────
@@ -24,7 +24,7 @@ export class SelectionImpl<
   TVariables extends object,
 > implements Selection<E, T, TVariables> {
   declare readonly [__phantom]: readonly [E, T, TVariables];
-  readonly [__selectionRuntime]: SelectionRuntime<E> = this;
+  readonly [__runtime]: SelectionRuntime<E> = this;
 
   private _fieldMap?: ReadonlyMap<string, FieldSelection>;
   private _directiveMap?: ReadonlyMap<string, DirectiveArgs>;
@@ -41,6 +41,7 @@ export class SelectionImpl<
     private readonly _fieldOptionsValue?: FieldOptionsValue,
     private readonly _directive?: string,
     private readonly _directiveArgs?: DirectiveArgs,
+    private readonly _operationName?: string,
   ) {}
 
   // ── Last field accessor (for $alias) ──
@@ -80,6 +81,13 @@ export class SelectionImpl<
 
   get schemaType(): SchemaType<E> {
     return this._schemaType;
+  }
+
+  get operationName(): string | undefined {
+    if (this._operationName !== undefined) {
+      return this._operationName;
+    }
+    return this._prev?.operationName;
   }
 
   // ── Builders (return new immutable nodes) ──
@@ -148,6 +156,28 @@ export class SelectionImpl<
       undefined,
       directive,
       directiveArgs,
+    ) as unknown as F;
+  }
+
+  withOperationName<F extends SelectionImpl<string, object, object>>(
+    operationName?: string,
+  ): F {
+    if (operationName === undefined) {
+      return this as unknown as F;
+    }
+    if (operationName.trim().length === 0) {
+      throw new Error("operationName cannot be empty");
+    }
+    return new SelectionImpl(
+      this,
+      false,
+      "",
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      operationName,
     ) as unknown as F;
   }
 
@@ -296,6 +326,14 @@ export class SelectionImpl<
   }
 }
 
+export const withOperationName = <S extends Selection<string, object, object>>(
+  selection: S,
+  operationName?: string,
+): S =>
+  (
+    selection as unknown as SelectionImpl<string, object, object>
+  ).withOperationName(operationName) as unknown as S;
+
 // ═══════════════════════════════════════════════════════════════════════
 // Serialization (extracted from old ResultContext)
 // ═══════════════════════════════════════════════════════════════════════
@@ -306,9 +344,9 @@ interface SerializedResult {
   readonly variableTypeMap: ReadonlyMap<string, string>;
 }
 
-function serialize(
+const serialize = (
   root: SelectionImpl<string, object, object>,
-): SerializedResult {
+): SerializedResult => {
   const writer = new TextBuilder();
   const fragmentWriter = new TextBuilder();
   let ctx = new SerializeContext(writer);
@@ -343,12 +381,17 @@ function serialize(
     fragmentText: fragmentWriter.toString(),
     variableTypeMap: ctx.variableTypeMap,
   };
-}
+};
 
 class SerializeContext {
   readonly namedFragmentMap = new Map<
     string,
     ExecutableSelection<string, object, object>
+  >();
+  private readonly fragmentNameCounter = new Map<string, number>();
+  private readonly fragmentRuntimeNameMap = new WeakMap<
+    ExecutableSelection<string, object, object>,
+    Map<string, string>
   >();
   readonly variableTypeMap: Map<string, string>;
 
@@ -364,6 +407,19 @@ class SerializeContext {
     const runtime = runtimeOf(sel);
     for (const field of runtime.fieldMap.values()) {
       const name = field.name;
+      const children = field.childSelections;
+      const isNamedSpread =
+        name.startsWith("... ") && !name.startsWith("... on ");
+
+      if (isNamedSpread && children?.length) {
+        const baseName = name.substring("...".length).trim();
+        for (const c of children) {
+          const runtimeName = this.resolveFragmentRuntimeName(baseName, c);
+          t(`... ${runtimeName}\n`);
+        }
+        continue;
+      }
+
       if (name !== "...") {
         const alias = field.fieldOptionsValue?.alias;
         if (alias && alias !== name) t(`${alias}: `);
@@ -374,21 +430,10 @@ class SerializeContext {
         }
         this.acceptDirectives(field.fieldOptionsValue?.directives);
       }
-
-      const children = field.childSelections;
       if (children?.length) {
         if (name === "...") {
           // Inline spread: flatten children directly into current selection.
           for (const c of children) this.acceptSelection(c);
-        } else if (name.startsWith("...") && !name.startsWith("... on ")) {
-          // Named spread: defer full body emission to fragment writer.
-          const fragName = name.substring("...".length).trim();
-          const old = this.namedFragmentMap.get(fragName);
-          for (const c of children) {
-            if (old && old !== c)
-              throw new Error(`Conflict fragment name ${fragName}`);
-            this.namedFragmentMap.set(fragName, c);
-          }
         } else {
           t(" ");
           this.writer.scope({ type: "block", multiLines: true }, () => {
@@ -398,6 +443,42 @@ class SerializeContext {
       }
       t("\n");
     }
+  }
+
+  private resolveFragmentRuntimeName(
+    baseName: string,
+    selection: ExecutableSelection<string, object, object>,
+  ): string {
+    const existingByName = this.namedFragmentMap.get(baseName);
+    if (existingByName === selection) {
+      return baseName;
+    }
+
+    let byBaseName = this.fragmentRuntimeNameMap.get(selection);
+    if (!byBaseName) {
+      byBaseName = new Map<string, string>();
+      this.fragmentRuntimeNameMap.set(selection, byBaseName);
+    }
+    const existing = byBaseName.get(baseName);
+    if (existing) {
+      return existing;
+    }
+
+    let runtimeName = baseName;
+    const occupied = this.namedFragmentMap.get(runtimeName);
+    if (occupied && occupied !== selection) {
+      const next = this.fragmentNameCounter.get(baseName) ?? 1;
+      let idx = next;
+      while (this.namedFragmentMap.has(`${baseName}_${idx}`)) {
+        idx += 1;
+      }
+      this.fragmentNameCounter.set(baseName, idx + 1);
+      runtimeName = `${baseName}_${idx}`;
+    }
+
+    this.namedFragmentMap.set(runtimeName, selection);
+    byBaseName.set(baseName, runtimeName);
+    return runtimeName;
   }
 
   acceptDirectives(directives?: ReadonlyMap<string, DirectiveArgs>) {
@@ -431,7 +512,7 @@ class SerializeContext {
 
     if (hasField) {
       this.writer.scope(
-        { type: "arguments", multiLines: isMultiLineJSON(args) },
+        { type: "arguments", multiLines: isMultilineJSON(args) },
         () => {
           for (const argName in args) {
             this.writer.separator();
@@ -440,7 +521,7 @@ class SerializeContext {
             if (argGraphQLTypeMap) {
               const typeName = argGraphQLTypeMap.get(argName);
               if (typeName !== undefined) {
-                if (arg?.[__parameterRefMarker]) {
+                if (arg?.[__marker]) {
                   const ref = arg as ParameterRef<string>;
                   this.registerVariableType(
                     ref,
@@ -461,7 +542,7 @@ class SerializeContext {
                 throw new Error(`Unknown argument '${argName}'`);
               }
             } else {
-              if (arg?.[__parameterRefMarker]) {
+              if (arg?.[__marker]) {
                 const ref = arg as ParameterRef<string>;
                 if (!ref.graphqlTypeName) {
                   throw new Error(
@@ -509,7 +590,7 @@ class SerializeContext {
       t(value ? "true" : "false");
       return;
     }
-    if (value?.[__parameterRefMarker]) {
+    if (value?.[__marker]) {
       const ref = value as ParameterRef<string>;
       if (!graphqlTypeName && !ref.graphqlTypeName) {
         throw new Error(
@@ -615,19 +696,20 @@ class SerializeContext {
   }
 }
 
-function isMultiLineJSON(obj: any): boolean {
+const isMultilineJSON = (obj: unknown): boolean => {
   let size = 0;
   if (Array.isArray(obj)) {
     for (const v of obj) {
-      if (typeof v === "object" && !v?.[__parameterRefMarker]) return true;
+      if (typeof v === "object" && !v?.[__marker]) return true;
       if (++size > 2) return true;
     }
-  } else if (typeof obj === "object") {
-    for (const k in obj) {
-      const v = obj[k];
-      if (typeof v === "object" && !v?.[__parameterRefMarker]) return true;
+  } else if (typeof obj === "object" && obj !== null) {
+    for (const k of Reflect.ownKeys(obj)) {
+      const v = (obj as Record<string | symbol, unknown>)[k];
+      if (typeof v === "object" && !(v as Record<symbol, unknown>)?.[__marker])
+        return true;
       if (++size > 2) return true;
     }
   }
   return false;
-}
+};

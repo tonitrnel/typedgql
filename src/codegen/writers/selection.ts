@@ -231,10 +231,13 @@ export class SelectionWriter extends Writer {
     if (isOperationRootTypeName(this.modelType.name)) {
       imports.useMapped("createSelection");
       imports.useMapped("ENUM_INPUT_METADATA");
+      imports.useMapped("withOperationName");
     }
     if (!isOperationRootTypeName(this.modelType.name)) {
       imports.useMapped("WithTypeName");
       imports.useMapped("ImplementationType");
+      imports.useMapped("ValueOrThunk");
+      imports.useMapped("FragmentSpread");
     }
     for (const field of Object.values(this.fieldMap)) {
       this.importFieldTypes(field);
@@ -349,25 +352,46 @@ export class SelectionWriter extends Writer {
     const t = this.text.bind(this);
     const modelName = this.modelType.name;
     const selectionSuperType = this.superSelectionTypeName(this.modelType);
-    const isUnion = this.modelType instanceof GraphQLUnionType;
     const fragmentTypeName = `ImplementationType<'${modelName}'>`;
-    const childParamType = `${selectionSuperType}<XName, X, XVariables>`;
     const resultDataType = `XName extends '${modelName}' ?\nT & X :\nWithTypeName<T, ${fragmentTypeName}> & (WithTypeName<X, ImplementationType<XName>> | {__typename: Exclude<${fragmentTypeName}, ImplementationType<XName>>})`;
 
-    // `$on` models GraphQL fragment spread behavior:
-    // - exact type match: merge child fields directly
-    // - polymorphic match: add discriminated __typename union branch
+    t("\n$on<X extends object, XVariables extends object>");
+    this.scope({ type: "parameters", multiLines: true }, () => {
+      t(
+        `builder: (it: ${selectionSuperType}<'${modelName}', {}, {}>) => ${selectionSuperType}<'${modelName}', X, XVariables>`,
+      );
+    });
+    t(`: ${this.selectionTypeName}`);
+    this.scope({ type: "generic", multiLines: true }, () => {
+      t("T & X");
+      this.separator(", ");
+      t("TVariables & XVariables");
+    });
+    t(";\n");
+
     t(
       `\n$on<XName extends ${fragmentTypeName}, X extends object, XVariables extends object>`,
     );
-    this.scope({ type: "parameters", multiLines: !isUnion }, () => {
-      t(`child: ${childParamType}`);
-      if (!isUnion) {
-        this.separator(", ");
-        t(
-          "fragmentName?: string // undefined: inline fragment; otherwise, real fragment",
-        );
-      }
+    this.scope({ type: "parameters", multiLines: true }, () => {
+      t("typeName: XName");
+      this.separator(", ");
+      t(
+        `builder: (it: ${selectionSuperType}<XName, {}, {}>) => ${selectionSuperType}<XName, X, XVariables>`,
+      );
+    });
+    t(`: ${this.selectionTypeName}`);
+    this.scope({ type: "generic", multiLines: true }, () => {
+      t(resultDataType);
+      this.separator(", ");
+      t("TVariables & XVariables");
+    });
+    t(";\n");
+
+    t(
+      `\n$use<XName extends ${fragmentTypeName}, X extends object, XVariables extends object>`,
+    );
+    this.scope({ type: "parameters", multiLines: true }, () => {
+      t("fragment: ValueOrThunk<FragmentSpread<string, XName, X, XVariables>>");
     });
     t(`: ${this.selectionTypeName}`);
     this.scope({ type: "generic", multiLines: true }, () => {
@@ -714,32 +738,40 @@ export class SelectionWriter extends Writer {
         ? this.modelType.getTypes()
         : [];
 
-    t("\nexport const ");
+    t("\nexport function ");
     t(emptySelectionName);
-    t(": ");
+    t("<T extends object = {}, TVariables extends object = {}>(");
+    t(`builder: (it: ${this.selectionTypeName}<{}, {}>) => ${this.selectionTypeName}<T, TVariables>`);
+    t(", operationName?: string");
+    t("): ");
     t(this.selectionTypeName);
-    t("<{}, {}> = ");
-    this.scope({ type: "blank", multiLines: true, suffix: ";\n" }, () => {
-      t("createSelection");
-      this.scope({ type: "parameters", multiLines: true }, () => {
-        t(`resolveRegisteredSchemaType("${this.modelType.name}")!`);
-        this.separator(", ");
-        this.text("ENUM_INPUT_METADATA");
-        this.separator(", ");
-        if (itemTypes.length === 0) {
-          t("undefined");
-        } else {
-          this.scope(
-            { type: "array", multiLines: itemTypes.length >= 2 },
-            () => {
-              for (const itemType of itemTypes) {
-                this.separator(", ");
-                this.str(itemType.name);
-              }
-            },
-          );
-        }
+    t("<T, TVariables> ");
+    this.scope({ type: "block", multiLines: true, suffix: "\n" }, () => {
+      t("const selection = builder(");
+      this.scope({ type: "blank", multiLines: true }, () => {
+        t("createSelection");
+        this.scope({ type: "parameters", multiLines: true }, () => {
+          t(`resolveRegisteredSchemaType("${this.modelType.name}")!`);
+          this.separator(", ");
+          this.text("ENUM_INPUT_METADATA");
+          this.separator(", ");
+          if (itemTypes.length === 0) {
+            t("undefined");
+          } else {
+            this.scope(
+              { type: "array", multiLines: itemTypes.length >= 2 },
+              () => {
+                for (const itemType of itemTypes) {
+                  this.separator(", ");
+                  this.str(itemType.name);
+                }
+              },
+            );
+          }
+        });
       });
+      t(");\n");
+      t("return withOperationName(selection, operationName);\n");
     });
 
     if (this.defaultSelectionName !== undefined) {

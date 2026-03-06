@@ -1,11 +1,12 @@
 import { SelectionImpl } from "./selection";
-import { __FRAGMENT_SPREAD } from "./types";
+import { __fragment_spread } from "./types";
 import { runtimeOf } from "./types";
 import type {
   Selection,
   ExecutableSelection,
   DirectiveArgs,
   FragmentSpread,
+  ValueOrThunk,
 } from "./types";
 import {
   SchemaType,
@@ -20,14 +21,14 @@ export { createSchemaType };
 
 // ─── Public factory ───────────────────────────────────────────────────
 
-export function createSelection<
+export const createSelection = <
   E extends string,
   F extends Selection<E, object, object>,
 >(
   schemaType: SchemaType<E>,
   enumInputMetadata: EnumInputMetadata,
   unionEntityTypes: string[] | undefined,
-): F {
+): F => {
   return new Proxy(
     new SelectionImpl(
       [schemaType, enumInputMetadata, unionEntityTypes],
@@ -36,7 +37,7 @@ export function createSelection<
     ),
     proxyHandler(schemaType),
   ) as unknown as F;
-}
+};
 
 // ─── Property access proxy handler ────────────────────────────────────
 
@@ -47,29 +48,44 @@ const BUILT_DIRECTIVES = new Set([
   "$include",
   "$skip",
   "$on",
+  "$use",
 ]);
 
-function buildRequiredArgs(
+const resolveValueOrThunk = <T>(value: ValueOrThunk<T>): T => {
+  return typeof value === "function" ? (value as () => T)() : value;
+};
+
+const createChildSelectionProxy = (
+  schemaType: SchemaType,
+  enumInputMetadata: EnumInputMetadata,
+) => {
+  return new Proxy(
+    new SelectionImpl([schemaType, enumInputMetadata, undefined], false, ""),
+    proxyHandler(schemaType),
+  );
+};
+
+const buildRequiredArgs = (
   argTypeMap: ReadonlyMap<string, string>,
-): { [key: string]: any } | undefined {
+): { [key: string]: unknown } | undefined => {
   if (!argTypeMap.size) return undefined;
   const requiredArgNames = Array.from(argTypeMap.entries())
     .filter(([, type]) => type.endsWith("!"))
     .map(([name]) => name);
   if (!requiredArgNames.length) return undefined;
 
-  const args: { [key: string]: any } = {};
+  const args: { [key: string]: unknown } = {};
   for (const name of requiredArgNames) {
     args[name] = ParameterRef.of(name);
   }
   return args;
-}
+};
 
-function resolveAssociationTarget(
+const resolveAssociationTarget = (
   fieldName: string,
   fieldTargetTypeName: string | undefined,
   ownerTypeName: string,
-): SchemaType {
+): SchemaType => {
   if (!fieldTargetTypeName) {
     throw new Error(`Field "${fieldName}" has no target type`);
   }
@@ -80,27 +96,27 @@ function resolveAssociationTarget(
     );
   }
   return targetSchemaType;
-}
+};
 
-function parseAssociationArgs(argArray: any[]) {
-  let args: { [key: string]: any } | undefined;
-  let childSelectionFactory: ((f: any) => any) | undefined;
+const parseAssociationArgs = (argArray: unknown[]) => {
+  let args: { [key: string]: unknown } | undefined;
+  let childSelectionFactory: ((f: unknown) => unknown) | undefined;
   let childSelection: SelectionImpl<string, object, object> | undefined;
 
   for (const arg of argArray) {
     if (arg instanceof SelectionImpl) {
       childSelection = arg;
     } else if (typeof arg === "function") {
-      childSelectionFactory = arg;
+      childSelectionFactory = arg as typeof childSelectionFactory;
     } else {
-      args = arg;
+      args = arg as typeof args;
     }
   }
   return { args, childSelectionFactory, childSelection };
-}
+};
 
-function parseMethodArgs(argArray: any[]) {
-  let args: { [key: string]: any } | undefined;
+const parseMethodArgs = (argArray: unknown[]) => {
+  let args: { [key: string]: unknown } | undefined;
   let child: SelectionImpl<string, object, object> | undefined;
   let optionsValue: FieldOptionsValue | undefined;
 
@@ -110,47 +126,47 @@ function parseMethodArgs(argArray: any[]) {
     } else if (typeof arg === "function") {
       optionsValue = arg(createFieldOptions()).value;
     } else {
-      args = arg;
+      args = arg as typeof args;
     }
   }
   return { args, child, optionsValue };
-}
+};
 
-function findLastFieldSelection(
+const findLastFieldSelection = (
   selection: SelectionImpl<string, object, object>,
   lastField: string,
-) {
+) => {
   const byKey = selection.fieldMap.get(lastField);
   if (byKey) return byKey;
   // `lastField` can refer to a field removed earlier in the chain.
   const byName = selection.findFieldsByName(lastField);
   return byName.length ? byName[0] : undefined;
-}
+};
 
-function rewriteLastFieldWithOptions(
+const rewriteLastFieldWithOptions = (
   selection: SelectionImpl<string, object, object>,
   lastField: string,
   optionsValue: FieldOptionsValue,
-) {
+) => {
   const existing = findLastFieldSelection(selection, lastField);
   let current = selection.removeField(lastField);
   current = current.addField(
     lastField,
-    existing?.args as { [key: string]: any } | undefined,
+    existing?.args as { [key: string]: unknown } | undefined,
     existing?.childSelections?.[0] as
       | SelectionImpl<string, object, object>
       | undefined,
     optionsValue,
   );
   return current;
-}
+};
 
-function mergeLastFieldDirective(
+const mergeLastFieldDirective = (
   selection: SelectionImpl<string, object, object>,
   lastField: string,
   directiveName: string,
   directiveArgs: DirectiveArgs,
-) {
+) => {
   const existing = findLastFieldSelection(selection, lastField);
   const directives = new Map<string, DirectiveArgs>(
     existing?.fieldOptionsValue?.directives ?? [],
@@ -161,17 +177,17 @@ function mergeLastFieldDirective(
     directives,
   };
   return rewriteLastFieldWithOptions(selection, lastField, optionsValue);
-}
+};
 
-function proxyHandler(
+const proxyHandler = (
   schemaType: SchemaType,
-): ProxyHandler<SelectionImpl<string, object, object>> {
+): ProxyHandler<SelectionImpl<string, object, object>> => {
   const handler: ProxyHandler<SelectionImpl<string, object, object>> = {
     get: (
       target: SelectionImpl<string, object, object>,
       p: string | symbol,
-      _receiver: any,
-    ): any => {
+      _receiver: unknown,
+    ): unknown => {
       if (p === "schemaType") return schemaType;
 
       if (typeof p === "string") {
@@ -185,7 +201,7 @@ function proxyHandler(
 
           // Association fields → callback pattern
           if (field.isAssociation || field.targetTypeName !== undefined) {
-            return (...argArray: any[]) => {
+            return (...argArray: unknown[]) => {
               const targetSchemaType = resolveAssociationTarget(
                 p,
                 field.targetTypeName,
@@ -196,19 +212,11 @@ function proxyHandler(
 
               if (childSelectionFactory) {
                 childSelection = childSelectionFactory(
-                  new Proxy(
-                    new SelectionImpl(
-                      [
-                        targetSchemaType,
-                        (target as any)._enumInputMetadata,
-                        undefined,
-                      ],
-                      false,
-                      "",
-                    ),
-                    proxyHandler(targetSchemaType),
+                  createChildSelectionProxy(
+                    targetSchemaType,
+                    (target as any)._enumInputMetadata,
                   ),
-                );
+                ) as typeof childSelection;
               }
               if (!childSelection) {
                 throw new Error(`Field "${p}" requires a child selection`);
@@ -238,29 +246,57 @@ function proxyHandler(
     },
   };
   return handler;
-}
+};
 
 // ─── Method call proxy handler ────────────────────────────────────────
 
-function methodHandler(
+const methodHandler = (
   targetSelection: SelectionImpl<string, object, object>,
   handler: ProxyHandler<SelectionImpl<string, object, object>>,
   field: string,
-): ProxyHandler<Function> {
+): ProxyHandler<Function> => {
   return {
-    apply: (_1: Function, _2: any, argArray: any[]): any => {
-      // $on(child) – fragment embedding
+    apply: (_1: Function, _2: unknown, argArray: unknown[]): unknown => {
+      // $on(...) – inline fragment embedding
       if (field === "$on") {
-        const child = argArray[0];
-        const isFragmentSpread = !!child?.[__FRAGMENT_SPREAD];
-        const childSelection: ExecutableSelection<string, object, object> =
-          isFragmentSpread
-            ? (child as FragmentSpread<string, string, object, object>)
-                .selection
-            : (child as ExecutableSelection<string, object, object>);
-        const fragmentName: string | undefined = isFragmentSpread
-          ? (child as FragmentSpread<string, string, object, object>).name
-          : argArray[1];
+        let childSelection: ExecutableSelection<string, object, object>;
+
+        if (
+          typeof argArray[0] === "string" &&
+          typeof argArray[1] === "function"
+        ) {
+          const targetTypeName = argArray[0] as string;
+          const builder = argArray[1] as (
+            it: unknown,
+          ) => ExecutableSelection<string, object, object>;
+          const targetSchemaType = resolveRegisteredSchemaType(targetTypeName);
+          if (!targetSchemaType) {
+            throw new Error(
+              `Cannot resolve schema type "${targetTypeName}" for $on`,
+            );
+          }
+          childSelection = builder(
+            createChildSelectionProxy(
+              targetSchemaType,
+              (targetSelection as any)._enumInputMetadata,
+            ),
+          );
+        } else if (typeof argArray[0] === "function") {
+          const builder = argArray[0] as (
+            it: unknown,
+          ) => ExecutableSelection<string, object, object>;
+          const targetSchemaType = targetSelection.schemaType;
+          childSelection = builder(
+            createChildSelectionProxy(
+              targetSchemaType,
+              (targetSelection as any)._enumInputMetadata,
+            ),
+          );
+        } else {
+          throw new Error(
+            "$on requires a builder or (typeName, builder) arguments",
+          );
+        }
 
         let parent: SelectionImpl<string, object, object> = targetSelection;
         if (
@@ -272,7 +308,39 @@ function methodHandler(
         return new Proxy(
           parent.addEmbeddable(
             childSelection as SelectionImpl<string, object, object>,
-            fragmentName,
+            undefined,
+          ),
+          handler,
+        );
+      }
+
+      // $use(fragment) – named fragment spread
+      if (field === "$use") {
+        const fragment = resolveValueOrThunk(
+          argArray[0] as ValueOrThunk<
+            FragmentSpread<string, string, object, object>
+          >,
+        );
+        if (!fragment || !fragment[__fragment_spread]) {
+          throw new Error("$use requires a fragment created by fragment$");
+        }
+        const childSelection = fragment.selection as ExecutableSelection<
+          string,
+          object,
+          object
+        >;
+
+        let parent: SelectionImpl<string, object, object> = targetSelection;
+        if (
+          targetSelection.schemaType.name !==
+          runtimeOf(childSelection).schemaType.name
+        ) {
+          parent = targetSelection.addField("__typename");
+        }
+        return new Proxy(
+          parent.addEmbeddable(
+            childSelection as SelectionImpl<string, object, object>,
+            fragment.name,
           ),
           handler,
         );
@@ -313,7 +381,10 @@ function methodHandler(
         const lastField = targetSelection.lastField;
         if (!lastField) {
           return new Proxy(
-            targetSelection.addDirective(argArray[0], argArray[1]),
+            targetSelection.addDirective(
+              argArray[0] as string,
+              argArray[1] as DirectiveArgs,
+            ),
             handler,
           );
         }
@@ -362,11 +433,11 @@ function methodHandler(
       );
     },
   };
-}
+};
 
 // ─── Sentinel ─────────────────────────────────────────────────────────
 
-function DUMMY() {}
+const DUMMY = () => {};
 
 export const SELECTION_TARGET = new SelectionImpl(
   [

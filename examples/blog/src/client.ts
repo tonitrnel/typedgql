@@ -32,13 +32,15 @@ async function fetchPosts() {
   console.log("\n── fetchPosts ──────────────────────────────────────────");
 
   const data = await execute(
-    G.query().posts((post) =>
-      post.id.title.publishedAt
-        .author((author) => author.id.name)
-        .comments((comment) =>
-          comment.id.body.createdAt.author((a) => a.id.name),
-        )
-        .tags((tag) => tag.id.name),
+    G.query((q) =>
+      q.posts((post) =>
+        post.id.title.publishedAt
+          .author((author) => author.id.name)
+          .comments((comment) =>
+            comment.id.body.createdAt.author((a) => a.id.name),
+          )
+          .tags((tag) => tag.id.name),
+      ),
     ),
   );
 
@@ -62,10 +64,12 @@ async function fetchPost(id: string) {
   console.log("\n── fetchPost ───────────────────────────────────────────");
 
   const data = await execute(
-    G.query().post((post) =>
-      post.id.title.content
-        .author((author) => author.id.name.bio)
-        .tags((tag) => tag.name),
+    G.query((q) =>
+      q.post((post) =>
+        post.id.title.content
+          .author((author) => author.id.name.bio)
+          .tags((tag) => tag.name),
+      ),
     ),
     { variables: { id } },
   );
@@ -93,8 +97,8 @@ async function createPost() {
   console.log("\n── createPost ──────────────────────────────────────────");
 
   const data = await execute(
-    G.mutation().createPost((post) =>
-      post.id.title.publishedAt.author((a) => a.name),
+    G.mutation((m) =>
+      m.createPost((post) => post.id.title.publishedAt.author((a) => a.name)),
     ),
     {
       variables: {
@@ -120,8 +124,8 @@ async function addComment(postId: string) {
   console.log("\n── addComment ──────────────────────────────────────────");
 
   const data = await execute(
-    G.mutation().addComment((comment) =>
-      comment.id.body.createdAt.author((a) => a.id.name),
+    G.mutation((m) =>
+      m.addComment((comment) => comment.id.body.createdAt.author((a) => a.id.name)),
     ),
     {
       variables: {

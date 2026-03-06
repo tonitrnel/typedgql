@@ -44,9 +44,11 @@ describe("Runtime + codegen integration", () => {
       query$: any;
     };
 
-    const selection = mod.query$
-      .users({ first: 1 }, (u: any) => u.totalCount)
-      .products({ first: 1 }, (p: any) => p.totalCount);
+    const selection = mod.query$((q: any) =>
+      q
+        .users({ first: 1 }, (u: any) => u.totalCount)
+        .products({ first: 1 }, (p: any) => p.totalCount),
+    );
 
     expect(normalizeGql(selection.toString())).toBe(
       normalizeGql(`

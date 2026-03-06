@@ -80,6 +80,22 @@ describe("schema runtime", () => {
     );
   });
 
+  it("keeps first schema factory when duplicate factories are registered", () => {
+    const first = createSchemaType("SchemaFactoryDuplicateFirst", "OBJECT", [], ["id"]);
+    const second = createSchemaType("SchemaFactoryDuplicateSecond", "OBJECT", [], ["id", "name"]);
+    let secondCalled = false;
+
+    registerSchemaTypeFactory("SchemaFactoryDuplicateKey", () => first);
+    registerSchemaTypeFactory("SchemaFactoryDuplicateKey", () => {
+      secondCalled = true;
+      return second;
+    });
+
+    const resolved = resolveRegisteredSchemaType("SchemaFactoryDuplicateKey");
+    expect(resolved).toBeUndefined();
+    expect(secondCalled).toBe(false);
+  });
+
   it("prefers schema type with more own fields when re-registering same name", () => {
     createSchemaType("SchemaReplaceType", "OBJECT", [], ["id"]);
     createSchemaType("SchemaReplaceType", "OBJECT", [], ["id", "name"]);

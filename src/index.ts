@@ -7,8 +7,14 @@ export type {
   Expand,
   FieldSelection,
   DirectiveArgs,
+  ValueOrThunk,
 } from "./runtime/types";
-export { FragmentSpread, StringValue, runtimeOf } from "./runtime/types";
+export {
+  FragmentSpread,
+  FragmentRef,
+  StringValue,
+  runtimeOf,
+} from "./runtime/types";
 
 // ─── Schema metadata ─────────────────────────────────────────────────
 export type {
@@ -25,6 +31,7 @@ export {
 
 // ─── Selection runtime ───────────────────────────────────────────────
 export { SelectionImpl as SelectionNode } from "./runtime/selection";
+export { withOperationName } from "./runtime/selection";
 export { createSelection } from "./runtime/proxy";
 
 // ─── Parameters & Options ─────────────────────────────────────────────
@@ -32,7 +39,10 @@ export type {
   AcceptableVariables,
   UnresolvedVariables,
 } from "./runtime/parameter";
-export { ParameterRef, __parameterRefMarker } from "./runtime/parameter";
+export {
+  ParameterRef,
+  __marker as __parameterRefMarker,
+} from "./runtime/parameter";
 export type { FieldOptions } from "./runtime/field-options";
 
 // ─── Enum metadata ───────────────────────────────────────────────────

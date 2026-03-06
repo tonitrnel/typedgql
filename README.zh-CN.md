@@ -1,38 +1,32 @@
 # @ptdgrp/typedgql
 
-`typedgql` is a TypeScript-first GraphQL client codegen + runtime library focused on end-to-end type safety and a fluent query-building experience.
+`typedgql` 是一个面向 TypeScript 的 GraphQL 客户端代码生成与运行时库，目标是提供“端到端类型安全 + 链式查询构建体验”。
 
-For Chinese documentation, see [README.zh-CN.md](./README.zh-CN.md).
+## 特性
 
-## Features
+- 基于 GraphQL Schema 生成强类型客户端代码
+- 链式 DSL 构建查询与变更，例如 `G.query((q) => q.posts((p) => p.id.title))`
+- 查询选择与请求变量分离：先构建 selection，再在 `execute` 时传 `variables`
+- 零运行时三方依赖（仅依赖你提供的 GraphQL executor）
+- 支持 ESM/CJS
+- 默认生成到 `node_modules/@ptdgrp/typedgql/__generated`
 
-- Generate strongly typed client code from a GraphQL schema
-- Fluent DSL for queries and mutations, for example:
-  `G.query((q) => q.posts((p) => p.id.title))`
-- Decouple selection building from variable values:
-  build once, pass `variables` at `execute(...)` time
-- Zero third-party runtime dependency
-  (only depends on your GraphQL executor)
-- Supports ESM/CJS
-- Default output directory:
-  `node_modules/@ptdgrp/typedgql/__generated`
-
-## Installation
+## 安装
 
 ```bash
 pnpm add @ptdgrp/typedgql
 pnpm add -D graphql typescript
 ```
 
-## Usage
+## 用法
 
-For advanced usage (Subscription, directives, GraphQL mapping), see:
+进阶内容（Subscription、指令、GraphQL 对照）见：
 
-- [Advanced Usage (Chinese)](./docs/advanced-usage.zh-CN.md)
+- [typedgql 进阶用法（中文）](./docs/advanced-usage.zh-CN.md)
 
-### 1. Vite Plugin (Recommended)
+### 1. Vite 插件方式（推荐）
 
-Configure `vite.config.ts`:
+在 `vite.config.ts` 中配置：
 
 ```ts
 import { defineConfig } from "vite";
@@ -41,15 +35,15 @@ import { typedgql } from "@ptdgrp/typedgql/vite";
 export default defineConfig({
   plugins: [
     typedgql({ schema: "./schema.graphql" }),
-    // or remote schema:
+    // 或远程 schema:
     // typedgql({ schema: "http://localhost:4000/graphql" }),
   ],
 });
 ```
 
-Codegen runs automatically when Vite starts, and re-runs when the schema changes.
+启动 Vite 时会自动生成代码；schema 变更后会自动重新生成。
 
-### 2. Manual Generation in Node
+### 2. Node 手动生成
 
 ```ts
 import { Generator, loadLocalSchema } from "@ptdgrp/typedgql/node";
@@ -61,7 +55,7 @@ const generator = new Generator({
 await generator.generate();
 ```
 
-### 3. Runtime Execution (Basic Example)
+### 3. 运行时执行（基础示例）
 
 ```ts
 import { G, execute, setGraphQLExecutor } from "@ptdgrp/typedgql";
@@ -82,9 +76,9 @@ const selection = G.query((q) =>
 const data = await execute(selection);
 ```
 
-### 4. Query With Variables (Recommended)
+### 4. 带变量查询（推荐写法）
 
-Selections are reusable. Pass variables when calling `execute(...)`.
+`selection` 与变量传值解耦：selection 可复用，变量在执行时传入。
 
 ```ts
 import { G, execute } from "@ptdgrp/typedgql";
@@ -96,7 +90,7 @@ const data = await execute(selection, {
 });
 ```
 
-### 5. Explicit Variable Placeholder (Optional)
+### 5. 显式变量占位（可选）
 
 ```ts
 import { G, execute, ParameterRef } from "@ptdgrp/typedgql";
@@ -112,8 +106,8 @@ const data = await execute(selection, {
 
 ## License
 
-MIT. See [LICENSE](./LICENSE).
+MIT，详见 [LICENSE](./LICENSE)。
 
 ## Credits
 
-This project evolves from ideas in [graphql-ts-client](https://github.com/babyfish-ct/graphql-ts-client). Thanks to [ChenTao](https://github.com/babyfish-ct) for the foundational work.
+本项目基于 [graphql-ts-client](https://github.com/babyfish-ct/graphql-ts-client) 的设计思路演进，感谢 [ChenTao](https://github.com/babyfish-ct) 提供的优秀基础。

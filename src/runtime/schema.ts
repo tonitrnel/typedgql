@@ -70,9 +70,9 @@ const SCHEMA_TYPE_REGISTRY = new Map<string, SchemaType>();
 const SCHEMA_TYPE_FACTORY_REGISTRY = new Map<string, () => SchemaType>();
 const SCHEMA_TYPE_RESOLVING = new Set<string>();
 
-export function resolveRegisteredSchemaType(
+export const resolveRegisteredSchemaType = (
   typeName: string,
-): SchemaType | undefined {
+): SchemaType | undefined => {
   const registered = SCHEMA_TYPE_REGISTRY.get(typeName);
   if (registered) {
     return registered;
@@ -97,16 +97,16 @@ export function resolveRegisteredSchemaType(
   }
 
   return SCHEMA_TYPE_REGISTRY.get(typeName);
-}
+};
 
-export function registerSchemaTypeFactory(
+export const registerSchemaTypeFactory = (
   typeName: string,
   factory: () => SchemaType,
-) {
+) => {
   if (!SCHEMA_TYPE_FACTORY_REGISTRY.has(typeName)) {
     SCHEMA_TYPE_FACTORY_REGISTRY.set(typeName, factory);
   }
-}
+};
 
 // ─── Field Descriptor (input to factory) ──────────────────────────────
 
@@ -122,12 +122,12 @@ type FieldDescriptor =
 
 // ─── Factory ────────────────────────────────────────────────────────
 
-export function createSchemaType<E extends string>(
+export const createSchemaType = <E extends string>(
   name: E,
   category: SchemaTypeCategory,
   superTypes: readonly SchemaType[],
   declaredFields: readonly FieldDescriptor[],
-): SchemaType<E> {
+): SchemaType<E> => {
   const declaredFieldMap = new Map<string, SchemaField>();
 
   for (const desc of declaredFields) {
@@ -172,17 +172,17 @@ export function createSchemaType<E extends string>(
 
   registerSchemaType(result);
   return result;
-}
+};
 
 // ─── Internal helpers ─────────────────────────────────────────────────
 
-function buildField(
+const buildField = (
   name: string,
   category: SchemaFieldCategory,
   argGraphQLTypeMap: ReadonlyMap<string, string>,
   targetTypeName?: string,
   undefinable?: boolean,
-): SchemaField {
+): SchemaField => {
   const isPlural = category === "LIST";
   const isAssociation = category === "REFERENCE" || isPlural;
 
@@ -199,24 +199,24 @@ function buildField(
       targetTypeName !== undefined,
     isUndefinable: undefinable ?? false,
   };
-}
+};
 
-function collectFields(type: SchemaType): ReadonlyMap<string, SchemaField> {
+const collectFields = (type: SchemaType): ReadonlyMap<string, SchemaField> => {
   const result = new Map<string, SchemaField>();
   _collect(type, result);
   return result;
-}
+};
 
-function _collect(type: SchemaType, out: Map<string, SchemaField>) {
+const _collect = (type: SchemaType, out: Map<string, SchemaField>) => {
   for (const [name, field] of type.ownFields) {
     out.set(name, field);
   }
   for (const superType of type.interfaces) {
     _collect(superType, out);
   }
-}
+};
 
-function registerSchemaType(type: SchemaType) {
+const registerSchemaType = (type: SchemaType) => {
   const existing = SCHEMA_TYPE_REGISTRY.get(type.name);
   if (!existing) {
     SCHEMA_TYPE_REGISTRY.set(type.name, type);
@@ -226,4 +226,4 @@ function registerSchemaType(type: SchemaType) {
   if (existing.ownFields.size < type.ownFields.size) {
     SCHEMA_TYPE_REGISTRY.set(type.name, type);
   }
-}
+};

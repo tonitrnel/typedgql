@@ -40,20 +40,24 @@ export default defineConfig({
 **Scalar field selection** — property access chains:
 
 ```typescript
-import { query$, execute } from "@ptdgrp/typedgql";
+import { G, execute } from "@ptdgrp/typedgql";
 
-const data = await execute(query$.posts((post) => post.id.title.publishedAt));
+const data = await execute(
+  G.query((q) => q.posts((post) => post.id.title.publishedAt)),
+);
 ```
 
 **Nested association fields** — callback selections:
 
 ```typescript
 const data = await execute(
-  query$.posts((post) =>
-    post.id.title
-      .author((author) => author.id.name)
-      .comments((comment) => comment.id.body.author((a) => a.name))
-      .tags((tag) => tag.name),
+  G.query((q) =>
+    q.posts((post) =>
+      post.id.title
+        .author((author) => author.id.name)
+        .comments((comment) => comment.id.body.author((a) => a.name))
+        .tags((tag) => tag.name),
+    ),
   ),
 );
 ```
@@ -61,10 +65,12 @@ const data = await execute(
 **Mutations with variables:**
 
 ```typescript
-import { mutation$, execute } from "@ptdgrp/typedgql";
+import { G, execute } from "@ptdgrp/typedgql";
 
 const data = await execute(
-  mutation$.createPost((post) => post.id.title.author((a) => a.name)),
+  G.mutation((m) =>
+    m.createPost((post) => post.id.title.author((a) => a.name)),
+  ),
   { variables: { input: { title: "Hello", content: "...", authorId: "a1" } } },
 );
 ```

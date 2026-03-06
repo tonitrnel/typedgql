@@ -123,7 +123,7 @@ function buildRequest<
 ): string {
   const runtime = runtimeOf(selection);
   const writer = new TextBuilder();
-  writer.text(`${runtime.schemaType.name.toLowerCase()} ${operationName ?? ""}`);
+  writer.text(`${runtime.schemaType.name.toLowerCase()} ${operationName ?? runtime.operationName ?? ""}`);
   if (runtime.variableTypeMap.size !== 0) {
     writer.scope(
       {

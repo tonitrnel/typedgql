@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { parse } from "graphql";
+import { parse, print } from "graphql";
 import { rm } from "fs/promises";
 import { join } from "path";
 import { pathToFileURL } from "url";
@@ -8,12 +8,23 @@ import { loadLocalSchema } from "../../src/codegen/schema-loader";
 import { ParameterRef } from "../../src/index";
 import { rewriteGeneratedImportsToSrcEntry } from "../helpers/rewrite-generated-imports";
 
-const SCHEMA_FILE = join(process.cwd(), "tests", "graphql-syntax", "schema.graphql");
-const GENERATED_DIR = join(process.cwd(), "__generated-graphql-syntax-test");
+const SCHEMA_FILE = join(
+  process.cwd(),
+  "tests",
+  "graphql-syntax",
+  "schema.graphql",
+);
+const GENERATED_DIR = join(process.cwd(), "tests", "__generated-graphql-syntax-test");
+const GENERATED_INDEX_FILE = join(GENERATED_DIR, "index.ts");
 const QUERY_SELECTION_FILE = join(
   GENERATED_DIR,
   "selections",
   "query-selection.ts",
+);
+const PAGE_SELECTION_FILE = join(
+  GENERATED_DIR,
+  "selections",
+  "page-selection.ts",
 );
 const MUTATION_SELECTION_FILE = join(
   GENERATED_DIR,
@@ -41,6 +52,28 @@ function parseSubscription(subscriptionBody: string, variableDefs = ""): void {
   parse(doc);
 }
 
+function pretty(doc: string): string {
+  return print(parse(doc));
+}
+
+function queryDoc(selection: any, variableDefs = ""): string {
+  return pretty(
+    `query Q${variableDefs} ${selection.toString()}\n${selection.toFragmentString()}`,
+  );
+}
+
+function mutationDoc(selection: any, variableDefs = ""): string {
+  return pretty(
+    `mutation M${variableDefs} ${selection.toString()}\n${selection.toFragmentString()}`,
+  );
+}
+
+function subscriptionDoc(selection: any, variableDefs = ""): string {
+  return pretty(
+    `subscription S${variableDefs} ${selection.toString()}\n${selection.toFragmentString()}`,
+  );
+}
+
 describe("GraphQL syntax generation (from codegen output)", () => {
   beforeAll(async () => {
     await rm(GENERATED_DIR, { recursive: true, force: true });
@@ -61,13 +94,28 @@ describe("GraphQL syntax generation (from codegen output)", () => {
       query$: any;
     };
 
-    const selection = mod.query$.post({ id: "p1" }, (p: any) =>
-      p.id.title.author((a: any) => a.id.name),
+    const selection = mod.query$(
+      (q: any) =>
+        q.post({ id: "p1" }, (p: any) =>
+          p.id.title.author((a: any) => a.id.name),
+        ),
+      "GetPost",
     );
 
-    expect(() => parseQuery(selection.toString())).not.toThrow();
-    expect(selection.toString()).toContain('post(id: "p1")');
-    expect(selection.toString()).toContain("author");
+    expect(queryDoc(selection)).toBe(
+      pretty(`
+        query Q {
+          post(id: "p1") {
+            id
+            title
+            author {
+              id
+              name
+            }
+          }
+        }
+      `),
+    );
   });
 
   it("builds valid alias/directive/variable output", async () => {
@@ -75,14 +123,22 @@ describe("GraphQL syntax generation (from codegen output)", () => {
       query$: any;
     };
 
-    const selection = mod.query$
-      .post({ id: ParameterRef.of("postId") }, (p: any) => p.title)
-      .$alias("postTitle")
-      .$include(true);
+    const selection = mod.query$((q: any) =>
+      q
+        .post({ id: ParameterRef.of("postId") }, (p: any) => p.title)
+        .$alias("postTitle")
+        .$include(true),
+    );
 
-    expect(() => parseQuery(selection.toString(), "($postId: ID!)")).not.toThrow();
-    expect(selection.toString()).toContain("postTitle: post");
-    expect(selection.toString()).toContain("@include");
+    expect(queryDoc(selection, "($postId: ID!)")).toBe(
+      pretty(`
+        query Q($postId: ID!) {
+          postTitle: post(id: $postId) @include(if: true) {
+            title
+          }
+        }
+      `),
+    );
   });
 
   it("builds valid complex args with enums/lists and multiple directives", async () => {
@@ -90,40 +146,76 @@ describe("GraphQL syntax generation (from codegen output)", () => {
       query$: any;
     };
 
-    const selection = mod.query$
-      .$directive("cacheControl", { maxAge: 60 })
-      .$directive("auth", { role: "ADMIN" })
-      .searchUsers(
-        {
-          filter: {
-            nameContains: "a",
-            role: "ADMIN",
-            emails: ["a@example.com", "b@example.com"],
+    const selection = mod.query$((q: any) =>
+      q
+        .$directive("cacheControl", { maxAge: 60 })
+        .$directive("auth", { role: "ADMIN" })
+        .searchUsers(
+          {
+            filter: {
+              nameContains: "a",
+              role: "ADMIN",
+              emails: ["a@example.com", "b@example.com"],
+            },
+            tags: ["new", "hot"],
+            role: "USER",
           },
-          tags: ["new", "hot"],
-          role: "USER",
-        },
-        (u: any) => u.id.name,
-      );
+          (u: any) => u.id.name,
+        ),
+    );
 
-    expect(() => parseQuery(selection.toString())).not.toThrow();
-    expect(selection.toString()).toContain("role: USER");
-    expect(selection.toString()).toContain("tags");
-    expect(selection.toString()).toContain("@cacheControl");
-    expect(selection.toString()).toContain("@auth");
+    expect(queryDoc(selection)).toBe(
+      pretty(`
+        query Q @auth(role: "ADMIN") @cacheControl(maxAge: 60) {
+          searchUsers(
+            filter: {
+              nameContains: "a"
+              role: ADMIN
+              emails: ["a@example.com", "b@example.com"]
+            }
+            tags: ["new", "hot"]
+            role: USER
+          ) {
+            id
+            name
+          }
+        }
+      `),
+    );
   });
 
   it("builds valid named fragment output", async () => {
     const mod = (await import(pathToFileURL(QUERY_SELECTION_FILE).href)) as {
       query$: any;
     };
+    const runtimeMod = (await import(
+      pathToFileURL(GENERATED_INDEX_FILE).href
+    )) as {
+      fragment$: any;
+    };
 
-    const selection = mod.query$.viewer((u: any) => u.$on(u.id.name, "UserFields"));
-    const doc = `query Q ${selection.toString()}\n${selection.toFragmentString()}`;
+    const userFields = runtimeMod.fragment$(
+      "User",
+      (u: any) => u.id.name,
+      "UserFields",
+    );
+    const selection = mod.query$((q: any) =>
+      q.viewer((u: any) => u.$use(userFields)),
+    );
+    expect(queryDoc(selection)).toBe(
+      pretty(`
+        query Q {
+          viewer {
+            ...UserFields
+          }
+        }
 
-    expect(() => parse(doc)).not.toThrow();
-    expect(selection.toString()).toContain("... UserFields");
-    expect(selection.toFragmentString()).toContain("fragment UserFields on User");
+        fragment UserFields on User {
+          id
+          name
+        }
+      `),
+    );
   });
 
   it("builds valid mutation syntax with variable input", async () => {
@@ -131,25 +223,33 @@ describe("GraphQL syntax generation (from codegen output)", () => {
       mutation$: any;
     };
 
-    const selection = mod.mutation$
-      .$directive("cacheControl", { maxAge: 5 })
-      .$directive("auth", { role: "ADMIN" })
-      .updateUser(
-        {
-          input: {
-            id: ParameterRef.of("userId"),
-            name: "Neo",
-            role: "ADMIN",
+    const selection = mod.mutation$((m: any) =>
+      m
+        .$directive("cacheControl", { maxAge: 5 })
+        .$directive("auth", { role: "ADMIN" })
+        .updateUser(
+          {
+            input: {
+              id: ParameterRef.of("userId"),
+              name: "Neo",
+              role: "ADMIN",
+            },
           },
-        },
-        (u: any) => u.id.name.email,
-      );
+          (u: any) => u.id.name.email,
+        ),
+    );
 
-    expect(() => parseMutation(selection.toString(), "($userId: ID!)")).not.toThrow();
-    expect(selection.toString()).toContain("updateUser");
-    expect(selection.toString()).toContain("input");
-    expect(selection.toString()).toContain("@cacheControl");
-    expect(selection.toString()).toContain("@auth");
+    expect(mutationDoc(selection, "($userId: ID!)")).toBe(
+      pretty(`
+        mutation M($userId: ID!) @auth(role: "ADMIN") @cacheControl(maxAge: 5) {
+          updateUser(input: { id: $userId, name: "Neo", role: ADMIN }) {
+            id
+            name
+            email
+          }
+        }
+      `),
+    );
   });
 
   it("builds valid syntax for directive args with variable refs", async () => {
@@ -157,16 +257,22 @@ describe("GraphQL syntax generation (from codegen output)", () => {
       query$: any;
     };
 
-    const selection = mod.query$
-      .$directive("cacheControl", { maxAge: ParameterRef.of("ttl", "Int!") })
-      .$directive("auth", { role: ParameterRef.of("role", "Role!") })
-      .viewer((u: any) => u.id);
+    const selection = mod.query$((q: any) =>
+      q
+        .$directive("cacheControl", { maxAge: ParameterRef.of("ttl", "Int!") })
+        .$directive("auth", { role: ParameterRef.of("role", "Role!") })
+        .viewer((u: any) => u.id),
+    );
 
-    expect(() => parseQuery(selection.toString(), "($ttl: Int!, $role: Role!)")).not.toThrow();
-    expect(selection.toString()).toContain("@cacheControl");
-    expect(selection.toString()).toContain("@auth");
-    expect(selection.toString()).toContain("$ttl");
-    expect(selection.toString()).toContain("$role");
+    expect(queryDoc(selection, "($ttl: Int!, $role: Role!)")).toBe(
+      pretty(`
+        query Q($ttl: Int!, $role: Role!) @auth(role: $role) @cacheControl(maxAge: $ttl) {
+          viewer {
+            id
+          }
+        }
+      `),
+    );
   });
 
   it("builds valid syntax when include and skip are both applied on field", async () => {
@@ -174,15 +280,22 @@ describe("GraphQL syntax generation (from codegen output)", () => {
       query$: any;
     };
 
-    const selection = mod.query$
-      .post({ id: "p1" }, (p: any) => p.title)
-      .$include(true)
-      .$skip(false);
+    const selection = mod.query$((q: any) =>
+      q
+        .post({ id: "p1" }, (p: any) => p.title)
+        .$include(true)
+        .$skip(false),
+    );
 
-    expect(() => parseQuery(selection.toString())).not.toThrow();
-    expect(selection.toString()).toContain("@include");
-    expect(selection.toString()).toContain("@skip");
-    expect(selection.toString()).toContain('post(id: "p1")');
+    expect(queryDoc(selection)).toBe(
+      pretty(`
+        query Q {
+          post(id: "p1") @include(if: true) @skip(if: false) {
+            title
+          }
+        }
+      `),
+    );
   });
 
   it("builds valid syntax for nested input with multiple variable refs", async () => {
@@ -190,23 +303,31 @@ describe("GraphQL syntax generation (from codegen output)", () => {
       mutation$: any;
     };
 
-    const selection = mod.mutation$.updateUser(
-      {
-        input: {
-          id: ParameterRef.of("userId"),
-          name: ParameterRef.of("name", "String"),
-          role: ParameterRef.of("role", "Role"),
+    const selection = mod.mutation$((m: any) =>
+      m.updateUser(
+        {
+          input: {
+            id: ParameterRef.of("userId"),
+            name: ParameterRef.of("name", "String"),
+            role: ParameterRef.of("role", "Role"),
+          },
         },
-      },
-      (u: any) => u.id.name,
+        (u: any) => u.id.name,
+      ),
     );
 
-    expect(() =>
-      parseMutation(selection.toString(), "($userId: ID!, $name: String, $role: Role)"),
-    ).not.toThrow();
-    expect(selection.toString()).toContain("$userId");
-    expect(selection.toString()).toContain("$name");
-    expect(selection.toString()).toContain("$role");
+    expect(
+      mutationDoc(selection, "($userId: ID!, $name: String, $role: Role)"),
+    ).toBe(
+      pretty(`
+        mutation M($userId: ID!, $name: String, $role: Role) {
+          updateUser(input: { id: $userId, name: $name, role: $role }) {
+            id
+            name
+          }
+        }
+      `),
+    );
   });
 
   it("builds valid syntax for oneOf input literal", async () => {
@@ -214,14 +335,23 @@ describe("GraphQL syntax generation (from codegen output)", () => {
       query$: any;
     };
 
-    const selection = mod.query$.lookupUser(
-      { input: { email: "neo@example.com" } },
-      (u: any) => u.id.email,
+    const selection = mod.query$((q: any) =>
+      q.lookupUser(
+        { input: { email: "neo@example.com" } },
+        (u: any) => u.id.email,
+      ),
     );
 
-    expect(() => parseQuery(selection.toString())).not.toThrow();
-    expect(selection.toString()).toContain("lookupUser");
-    expect(selection.toString()).toContain('email: "neo@example.com"');
+    expect(queryDoc(selection)).toBe(
+      pretty(`
+        query Q {
+          lookupUser(input: { email: "neo@example.com" }) {
+            id
+            email
+          }
+        }
+      `),
+    );
   });
 
   it("builds valid syntax for oneOf input variable", async () => {
@@ -229,44 +359,219 @@ describe("GraphQL syntax generation (from codegen output)", () => {
       query$: any;
     };
 
-    const selection = mod.query$.lookupUser(
-      { input: ParameterRef.of("lookupInput", "UserLookupInput!") },
-      (u: any) => u.id.name,
+    const selection = mod.query$((q: any) =>
+      q.lookupUser(
+        { input: ParameterRef.of("lookupInput", "UserLookupInput!") },
+        (u: any) => u.id.name,
+      ),
     );
 
-    expect(() =>
-      parseQuery(selection.toString(), "($lookupInput: UserLookupInput!)"),
-    ).not.toThrow();
-    expect(selection.toString()).toContain("$lookupInput");
+    expect(queryDoc(selection, "($lookupInput: UserLookupInput!)")).toBe(
+      pretty(`
+        query Q($lookupInput: UserLookupInput!) {
+          lookupUser(input: $lookupInput) {
+            id
+            name
+          }
+        }
+      `),
+    );
+  });
+
+  it("builds valid syntax with fragment$ + $use", async () => {
+    const mod = (await import(pathToFileURL(GENERATED_INDEX_FILE).href)) as {
+      fragment$: any;
+    };
+    const queryMod = (await import(
+      pathToFileURL(QUERY_SELECTION_FILE).href
+    )) as {
+      query$: any;
+    };
+
+    const userBase = mod.fragment$("User", (u: any) => u.id.name, "UserBase");
+    const selection = queryMod.query$((q: any) =>
+      q.viewer((u: any) => u.$use(userBase)),
+    );
+    expect(queryDoc(selection)).toBe(
+      pretty(`
+        query Q {
+          viewer {
+            ...UserBase
+          }
+        }
+
+        fragment UserBase on User {
+          id
+          name
+        }
+      `),
+    );
+  });
+
+  it("is equivalent to nested named fragment GraphQL via print(parse())", async () => {
+    const runtimeMod = (await import(
+      pathToFileURL(GENERATED_INDEX_FILE).href
+    )) as {
+      fragment$: any;
+    };
+    const queryMod = (await import(
+      pathToFileURL(QUERY_SELECTION_FILE).href
+    )) as {
+      query$: any;
+    };
+
+    const standardProfilePic = runtimeMod.fragment$(
+      "User",
+      (u: any) => u.email,
+      "standardProfilePic",
+    );
+    const friendFields = runtimeMod.fragment$(
+      "User",
+      (u: any) => u.id.name.$use(standardProfilePic),
+      "friendFields",
+    );
+
+    const selection = queryMod.query$(
+      (q: any) =>
+        q
+          .viewer((u: any) => u.$use(friendFields))
+          .lookupUser({ input: { id: "u1" } }, (u: any) =>
+            u.$use(friendFields),
+          ),
+      "withNestedFragments",
+    );
+
+    const actual = pretty(
+      `${selection.toString()}\n${selection.toFragmentString()}`,
+    );
+    expect(selection.operationName).toBe("withNestedFragments");
+    const expected = pretty(`
+        {
+          viewer {
+            ...friendFields
+          }
+          lookupUser(input: { id: "u1" }) {
+            ...friendFields
+          }
+        }
+
+        fragment friendFields on User {
+          id
+          name
+          ...standardProfilePic
+        }
+
+        fragment standardProfilePic on User {
+          email
+        }
+      `);
+
+    expect(actual).toBe(expected);
+  });
+
+  it("builds valid syntax for interface fields from generated selections", async () => {
+    const mod = (await import(pathToFileURL(QUERY_SELECTION_FILE).href)) as {
+      query$: any;
+    };
+
+    const selection = mod.query$((q: any) =>
+      q.node({ id: "n1" }, (n: any) => n.id),
+    );
+
+    expect(queryDoc(selection)).toBe(
+      pretty(`
+        query Q {
+          node(id: "n1") {
+            id
+          }
+        }
+      `),
+    );
+  });
+
+  it("builds valid named fragment syntax on interface selection", async () => {
+    const mod = (await import(pathToFileURL(QUERY_SELECTION_FILE).href)) as {
+      query$: any;
+    };
+    const runtimeMod = (await import(
+      pathToFileURL(GENERATED_INDEX_FILE).href
+    )) as {
+      fragment$: any;
+    };
+
+    const nodeFields = runtimeMod.fragment$(
+      "Node",
+      (n: any) => n.id,
+      "NodeFields",
+    );
+    const selection = mod.query$((q: any) =>
+      q.node({ id: "n1" }, (n: any) => n.$use(nodeFields)),
+    );
+    expect(queryDoc(selection)).toBe(
+      pretty(`
+        query Q {
+          node(id: "n1") {
+            ...NodeFields
+          }
+        }
+
+        fragment NodeFields on Node {
+          id
+        }
+      `),
+    );
   });
 
   it("builds valid subscription syntax from generated root selection", async () => {
-    const mod = (await import(pathToFileURL(SUBSCRIPTION_SELECTION_FILE).href)) as {
+    const mod = (await import(
+      pathToFileURL(SUBSCRIPTION_SELECTION_FILE).href
+    )) as {
       subscription$: any;
     };
 
-    const selection = mod.subscription$
-      .postUpdated({ id: "p1" }, (p: any) => p.id.title)
-      .$directive("cacheControl", { maxAge: 3 });
+    const selection = mod.subscription$((s: any) =>
+      s
+        .postUpdated({ id: "p1" }, (p: any) => p.id.title)
+        .$directive("cacheControl", { maxAge: 3 }),
+    );
 
-    expect(() => parseSubscription(selection.toString())).not.toThrow();
-    expect(selection.toString()).toContain("postUpdated");
-    expect(selection.toString()).toContain("@cacheControl");
+    expect(subscriptionDoc(selection)).toBe(
+      pretty(`
+        subscription S {
+          postUpdated(id: "p1") @cacheControl(maxAge: 3) {
+            id
+            title
+          }
+        }
+      `),
+    );
   });
 
   it("builds valid subscription syntax with parameter refs", async () => {
-    const mod = (await import(pathToFileURL(SUBSCRIPTION_SELECTION_FILE).href)) as {
+    const mod = (await import(
+      pathToFileURL(SUBSCRIPTION_SELECTION_FILE).href
+    )) as {
       subscription$: any;
     };
 
-    const selection = mod.subscription$.postUpdated(
-      { id: ParameterRef.of("postId") },
-      (p: any) => p.id.author((a: any) => a.id.name),
+    const selection = mod.subscription$((s: any) =>
+      s.postUpdated({ id: ParameterRef.of("postId") }, (p: any) =>
+        p.id.author((a: any) => a.id.name),
+      ),
     );
 
-    expect(() =>
-      parseSubscription(selection.toString(), "($postId: ID!)"),
-    ).not.toThrow();
-    expect(selection.toString()).toContain("$postId");
+    expect(subscriptionDoc(selection, "($postId: ID!)")).toBe(
+      pretty(`
+        subscription S($postId: ID!) {
+          postUpdated(id: $postId) {
+            id
+            author {
+              id
+              name
+            }
+          }
+        }
+      `),
+    );
   });
 });

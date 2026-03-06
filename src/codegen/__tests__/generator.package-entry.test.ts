@@ -130,9 +130,9 @@ describe("Generator package entrypoint helpers", () => {
     expect(output).toContain("import { query$ }");
     expect(output).toContain("import { mutation$ }");
     expect(output).toContain("import { subscription$ }");
-    expect(output).toContain("query: () => query$");
-    expect(output).toContain("mutation: () => mutation$");
-    expect(output).toContain("subscription: () => subscription$");
+    expect(output).toContain("query: query$");
+    expect(output).toContain("mutation: mutation$");
+    expect(output).toContain("subscription: subscription$");
     expect(output).toContain("export * from './__generated/enums';");
     expect(output).toContain("export * from './__generated/inputs';");
     expect(output).toContain("export type * from './__generated/type-hierarchy';");

@@ -38,7 +38,7 @@ describe("Runtime + codegen integration (subscription)", () => {
     await rm(GENERATED_DIR, { recursive: true, force: true });
   });
 
-  it("supports gateway-style usage with G.subscription() and for-await subscribe", async () => {
+  it("supports gateway-style usage with G.subscription(...) and for-await subscribe", async () => {
     const runtimeMod = (await import(pathToFileURL(GENERATED_INDEX_FILE).href)) as {
       subscribe: any;
     };
@@ -47,11 +47,12 @@ describe("Runtime + codegen integration (subscription)", () => {
     };
 
     const G = {
-      subscription: () => selectionMod.subscription$,
+      subscription: selectionMod.subscription$,
     } as const;
 
-    const selection = G.subscription().postCreated((post: any) =>
-      post.id.title.author((a: any) => a.id.name),
+    const selection = G.subscription(
+      (s: any) => s.postCreated((post: any) => post.id.title.author((a: any) => a.id.name)),
+      "PostCreatedSub",
     );
 
     const requests: string[] = [];
@@ -59,7 +60,7 @@ describe("Runtime + codegen integration (subscription)", () => {
 
     async function* subscriber(request: string): AsyncIterable<any> {
       expect(() => parse(request)).not.toThrow();
-      expect(request).toContain("subscription");
+      expect(request).toContain("subscription PostCreatedSub");
       expect(request).toContain("postCreated");
       expect(request).toContain("author");
       requests.push(request);
@@ -90,9 +91,10 @@ describe("Runtime + codegen integration (subscription)", () => {
       subscription$: any;
     };
 
-    const selection = selectionMod.subscription$.postCreated(
-      { id: ParameterRef.of("postId") },
-      (post: any) => post.id,
+    const selection = selectionMod.subscription$(
+      (s: any) =>
+        s.postCreated({ id: ParameterRef.of("postId") }, (post: any) => post.id),
+      "PostCreatedWithVar",
     );
 
     let receivedVariables: Record<string, unknown> | undefined;
@@ -102,6 +104,7 @@ describe("Runtime + codegen integration (subscription)", () => {
       variables: Record<string, unknown>,
     ): AsyncIterable<any> {
       expect(() => parse(request)).not.toThrow();
+      expect(request).toContain("subscription PostCreatedWithVar");
       expect(request).toContain("$postId: ID!");
       expect(request).toContain("postCreated(id: $postId)");
       expect(variables).toEqual({ postId: "p1" });

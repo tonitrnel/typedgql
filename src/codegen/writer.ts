@@ -27,7 +27,10 @@ export interface ScopeArgs {
 
 // ─── Lookup tables ───────────────────────────────────────────────────
 
-const SCOPE_BRACKETS: Record<ScopeType, readonly [open: string, close: string]> = {
+const SCOPE_BRACKETS: Record<
+  ScopeType,
+  readonly [open: string, close: string]
+> = {
   blank: ["", ""],
   block: ["{", "}"],
   parameters: ["(", ")"],
@@ -114,7 +117,7 @@ export abstract class Writer {
   /**
    * Hook for subclasses to register all imports before body generation.
    */
-  protected prepareImports(): void { }
+  protected prepareImports(): void {}
 
   protected abstract writeCode(): void;
 
@@ -145,7 +148,8 @@ export abstract class Writer {
     if (namedType instanceof GraphQLScalarType && this.options.scalarTypeMap) {
       const mapped = this.options.scalarTypeMap[namedType.name];
       if (typeof mapped !== "object") return;
-      const set = this.importedScalarTypes.get(mapped.importSource) ?? new Set();
+      const set =
+        this.importedScalarTypes.get(mapped.importSource) ?? new Set();
       set.add(mapped.typeName);
       this.importedScalarTypes.set(mapped.importSource, set);
     }
@@ -247,9 +251,9 @@ export abstract class Writer {
     objectRender?:
       | string
       | ((
-        type: GraphQLObjectType | GraphQLInterfaceType,
-        field: GraphQLField<any, any>,
-      ) => boolean),
+          type: GraphQLObjectType | GraphQLInterfaceType,
+          field: GraphQLField<any, any>,
+        ) => boolean),
   ): void {
     if (type instanceof GraphQLNonNull) {
       this.typeRef(type.ofType, objectRender);
@@ -286,7 +290,9 @@ export abstract class Writer {
       return;
     }
     const neverType: never = type;
-    throw new Error(`Unsupported GraphQL type ${(neverType as GraphQLType).toString()}`);
+    throw new Error(
+      `Unsupported GraphQL type ${(neverType as GraphQLType).toString()}`,
+    );
   }
 
   /**
@@ -318,8 +324,8 @@ export abstract class Writer {
   // ── Private ──
 
   private writeNamedTypeImports(): void {
-    const sortedTypes = Array.from(this.importedTypes).sort(
-      (a, b) => a.name.localeCompare(b.name),
+    const sortedTypes = Array.from(this.importedTypes).sort((a, b) =>
+      a.name.localeCompare(b.name),
     );
     for (const importedType of sortedTypes) {
       const behavior = this.importingBehavior(importedType);
@@ -357,7 +363,9 @@ export abstract class Writer {
     return this.isUnderGlobalDir() ? `./${subDir}` : `../${subDir}`;
   }
 
-  private typeSubDir(importedType: GraphQLNamedType): "inputs" | "enums" | "selections" {
+  private typeSubDir(
+    importedType: GraphQLNamedType,
+  ): "inputs" | "enums" | "selections" {
     if (importedType instanceof GraphQLInputObjectType) return "inputs";
     if (importedType instanceof GraphQLEnumType) return "enums";
     return "selections";
@@ -368,9 +376,9 @@ export abstract class Writer {
     objectRender?:
       | string
       | ((
-        type: GraphQLObjectType | GraphQLInterfaceType,
-        field: GraphQLField<any, any>,
-      ) => boolean),
+          type: GraphQLObjectType | GraphQLInterfaceType,
+          field: GraphQLField<any, any>,
+        ) => boolean),
   ): void {
     if (typeof objectRender === "string") {
       this.text(objectRender);

@@ -4,12 +4,10 @@
  * 1. If object is used by field arguments, don't specify the graphqlTypeName
  * 2. If object is used by directive arguments, graphqlTypeName is required
  */
-export const __parameterRefMarker: unique symbol = Symbol(
-  "__parameterRefMarker",
-);
+export const __marker: unique symbol = Symbol("__parameter_ref_marker");
 
 export class ParameterRef<TName extends string> {
-  readonly [__parameterRefMarker] = true;
+  readonly [__marker] = true;
 
   private constructor(
     readonly name: TName,
@@ -33,7 +31,7 @@ export type AcceptableVariables<T extends object> = {
 };
 
 export type UnresolvedVariables<T, TVariables> = ReversedType<
-  UnsrolvedNames<UnresolvedRefs<T>>,
+  UnresolvedNames<UnresolvedRefs<T>>,
   TVariables
 >;
 
@@ -46,7 +44,7 @@ type UnresolvedRefs<TVariables> = Pick<
   }[keyof TVariables]
 >;
 
-type UnsrolvedNames<TUnresolvedVariableRefs> = {
+type UnresolvedNames<TUnresolvedVariableRefs> = {
   [K in keyof TUnresolvedVariableRefs]: ParameterRefName<
     TUnresolvedVariableRefs[K]
   >;

@@ -25,7 +25,7 @@ export class JSImportCollector<TSymbol extends string = string> {
   constructor(
     private readonly sink: (stmt: string) => void,
     private readonly sourceMap: JSImportSourceMap<TSymbol>,
-  ) { }
+  ) {}
 
   useMapped(symbol: TSymbol): void {
     const spec = this.sourceMap[symbol];
@@ -50,17 +50,25 @@ export class JSImportCollector<TSymbol extends string = string> {
 
   emit(): void {
     for (const [source, symbols] of this.sorted(this.typeBySource)) {
-      this.sink(`import type { ${Array.from(symbols).sort().join(", ")} } from '${source}';`);
+      this.sink(
+        `import type { ${Array.from(symbols).sort().join(", ")} } from '${source}';`,
+      );
     }
     for (const [source, symbols] of this.sorted(this.valueBySource)) {
-      this.sink(`import { ${Array.from(symbols).sort().join(", ")} } from '${source}';`);
+      this.sink(
+        `import { ${Array.from(symbols).sort().join(", ")} } from '${source}';`,
+      );
     }
     for (const source of Array.from(this.sideEffects).sort()) {
       this.sink(`import '${source}';`);
     }
   }
 
-  private collect(map: Map<string, Set<string>>, source: string, symbol: string): void {
+  private collect(
+    map: Map<string, Set<string>>,
+    source: string,
+    symbol: string,
+  ): void {
     const set = map.get(source) ?? new Set<string>();
     set.add(symbol);
     map.set(source, set);
@@ -82,7 +90,10 @@ export const CODEGEN_IMPORT_SOURCE_MAP = {
   UnresolvedVariables: { source: RUNTIME_ENTRY_SOURCE, kind: "type" },
   DirectiveArgs: { source: RUNTIME_ENTRY_SOURCE, kind: "type" },
   Selection: { source: RUNTIME_ENTRY_SOURCE, kind: "type" },
+  ValueOrThunk: { source: RUNTIME_ENTRY_SOURCE, kind: "type" },
+  FragmentSpread: { source: RUNTIME_ENTRY_SOURCE, kind: "type" },
   createSelection: { source: RUNTIME_ENTRY_SOURCE, kind: "value" },
+  withOperationName: { source: RUNTIME_ENTRY_SOURCE, kind: "value" },
   createSchemaType: { source: RUNTIME_ENTRY_SOURCE, kind: "value" },
   registerSchemaTypeFactory: { source: RUNTIME_ENTRY_SOURCE, kind: "value" },
   resolveRegisteredSchemaType: { source: RUNTIME_ENTRY_SOURCE, kind: "value" },
@@ -103,7 +114,10 @@ export type SelectionImportSymbol = Extract<
   | "UnresolvedVariables"
   | "DirectiveArgs"
   | "Selection"
+  | "ValueOrThunk"
+  | "FragmentSpread"
   | "createSelection"
+  | "withOperationName"
   | "createSchemaType"
   | "registerSchemaTypeFactory"
   | "resolveRegisteredSchemaType"
@@ -112,5 +126,7 @@ export type SelectionImportSymbol = Extract<
   | "ImplementationType"
 >;
 
-export type EnumInputMetadataWriterImportSymbol =
-  Extract<CodegenImportSymbol, "EnumInputMetadataBuilder">;
+export type EnumInputMetadataWriterImportSymbol = Extract<
+  CodegenImportSymbol,
+  "EnumInputMetadataBuilder"
+>;

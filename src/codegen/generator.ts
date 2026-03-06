@@ -351,6 +351,13 @@ export class Generator {
 
   private async writeIndex(schema: GraphQLSchema) {
     const stream = createStream(join(this.targetDir, "index.ts"));
+    stream.write(`import type { Selection } from "../dist/index.mjs";\n`);
+    stream.write(
+      `import { FragmentRef, createSelection, resolveRegisteredSchemaType } from "../dist/index.mjs";\n`,
+    );
+    stream.write(
+      `import { ENUM_INPUT_METADATA } from "./enum-input-metadata";\n\n`,
+    );
     stream.write(
       `export type { GraphQLExecutor, GraphQLSubscriber, Simplify } from "./client-runtime";\n`,
     );
@@ -363,6 +370,33 @@ export class Generator {
     stream.write(
       "export { upcastTypes, downcastTypes } from './type-hierarchy';\n",
     );
+    stream.write(
+      `\nexport function fragment$<E extends string, T extends object, TVariables extends object>(\n`,
+    );
+    stream.write(`  typeName: E,\n`);
+    stream.write(
+      `  builder: (it: Selection<E, {}, {}>) => Selection<E, T, TVariables>,\n`,
+    );
+    stream.write(`  fragmentName?: string,\n`);
+    stream.write(`): FragmentRef<string, E, T, TVariables> {\n`);
+    stream.write(
+      `  const schemaType = resolveRegisteredSchemaType(typeName);\n`,
+    );
+    stream.write(`  if (!schemaType) {\n`);
+    stream.write(
+      `    throw new Error(\`Cannot resolve schema type \"\${typeName}\" for fragment$\`);\n`,
+    );
+    stream.write(`  }\n`);
+    stream.write(`  const base = createSelection<E, Selection<E, {}, {}>>(\n`);
+    stream.write(`    schemaType as any,\n`);
+    stream.write(`    ENUM_INPUT_METADATA,\n`);
+    stream.write(`    undefined,\n`);
+    stream.write(`  );\n`);
+    stream.write(`  const selection = builder(base);\n`);
+    stream.write(
+      `  return new FragmentRef(fragmentName ?? \`\${typeName}Fragment\`, selection as any);\n`,
+    );
+    stream.write(`}\n`);
     await endStream(stream);
   }
 
@@ -437,11 +471,12 @@ export class Generator {
     // (includes execute, setGraphQLExecutor, ImplementationType, upcastTypes, etc.)
     stream.write(`export * from './__generated/index';\n`);
     stream.write(
-      `export type { Selection, ExecutableSelection, ShapeOf, VariablesOf, Expand, FieldSelection, DirectiveArgs, EnumInputMetadata, EnumInputMetaType, AcceptableVariables, UnresolvedVariables, SchemaType, SchemaField, SchemaTypeCategory, SchemaFieldCategory, FieldOptions } from './dist/index.mjs';\n`,
+      `export type { Selection, ExecutableSelection, ShapeOf, VariablesOf, Expand, FieldSelection, DirectiveArgs, EnumInputMetadata, EnumInputMetaType, AcceptableVariables, UnresolvedVariables, ValueOrThunk, SchemaType, SchemaField, SchemaTypeCategory, SchemaFieldCategory, FieldOptions } from './dist/index.mjs';\n`,
     );
     stream.write(
-      `export { FragmentSpread, StringValue, runtimeOf, createSchemaType, resolveRegisteredSchemaType, registerSchemaTypeFactory, SelectionNode, createSelection, ParameterRef, EnumInputMetadataBuilder, TextBuilder, cyrb53 } from './dist/index.mjs';\n`,
+      `export { FragmentSpread, FragmentRef, StringValue, runtimeOf, createSchemaType, resolveRegisteredSchemaType, registerSchemaTypeFactory, SelectionNode, createSelection, ParameterRef, EnumInputMetadataBuilder, TextBuilder, cyrb53 } from './dist/index.mjs';\n`,
     );
+    stream.write(`import { fragment$ } from './__generated/index';\n`);
 
     // Import root operation selections for building the gateway object.
     if (queryType instanceof GraphQLObjectType) {
@@ -476,14 +511,15 @@ export class Generator {
 
     stream.write("export const G = {\n");
     if (queryType instanceof GraphQLObjectType) {
-      stream.write("  query: () => query$,\n");
+      stream.write("  query: query$,\n");
     }
     if (mutationType instanceof GraphQLObjectType) {
-      stream.write("  mutation: () => mutation$,\n");
+      stream.write("  mutation: mutation$,\n");
     }
     if (subscriptionType instanceof GraphQLObjectType) {
-      stream.write("  subscription: () => subscription$,\n");
+      stream.write("  subscription: subscription$,\n");
     }
+    stream.write("  fragment: fragment$,\n");
     stream.write("} as const;\n");
 
     if (this.hasGeneratedEnums(schema)) {

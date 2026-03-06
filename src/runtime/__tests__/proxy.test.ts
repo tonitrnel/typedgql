@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import * as fc from "fast-check";
 import { createSelection, createSchemaType } from "../proxy";
 import { EnumInputMetadataBuilder } from "../enum-metadata";
-import { FragmentSpread } from "../types";
+import { FragmentRef } from "../types";
 import type { Selection } from "../types";
 
 const enumInputMetadata = new EnumInputMetadataBuilder().build();
@@ -225,7 +225,7 @@ describe("关联字段回调选择", () => {
         expect(childFieldMap.has("role")).toBe(true);
     });
 
-    it("$on(fragmentSpread) embeds named fragment using symbol marker", () => {
+    it("$use(fragmentRef) embeds named fragment", () => {
         const childType = makeType("Chat", ["id", "role"]);
         const parentType = makeType(
             "Task",
@@ -240,14 +240,32 @@ describe("关联字段回调选择", () => {
             parentType, enumInputMetadata, undefined,
         );
 
-        class ChatFragment extends FragmentSpread<"chatFields", "Chat", object, object> {
-            constructor(selection: Selection<"Chat", object, object>) {
-                super("chatFields", selection);
-            }
-        }
-
-        const result = (parentSelection as any).$on(new ChatFragment((childSelection as any).id.role));
+        const fragment = new FragmentRef("chatFields", (childSelection as any).id.role);
+        const result = (parentSelection as any).$use(fragment);
         expect(result.fieldMap.has("... chatFields")).toBe(true);
+    });
+
+    it("$use accepts thunk fragment value", () => {
+        const childType = makeType("ChatThunk", ["id"]);
+        const parentType = makeType(
+            "TaskThunk",
+            ["id"],
+            [{ name: "chat", targetTypeName: "ChatThunk" }],
+        );
+        const childSelection = createSelection<string, Selection<string, object, object>>(
+            childType,
+            enumInputMetadata,
+            undefined,
+        );
+        const parentSelection = createSelection<string, Selection<string, object, object>>(
+            parentType,
+            enumInputMetadata,
+            undefined,
+        );
+
+        const fragment = new FragmentRef("chatThunkFields", (childSelection as any).id);
+        const result = (parentSelection as any).$use(() => fragment);
+        expect(result.fieldMap.has("... chatThunkFields")).toBe(true);
     });
 
     it("$directive() applies to selection when there is no preceding field", () => {
@@ -579,21 +597,55 @@ describe("关联字段回调选择", () => {
         expect(result.toString()).not.toContain("q: $q");
     });
 
-    it("$on with direct selection does not force __typename when schema type is same", () => {
+    it("$on with same-type builder does not force __typename", () => {
         const nodeType = makeType("SameNode", ["id", "name"]);
         const parentSelection = createSelection<string, Selection<string, object, object>>(
             nodeType,
             enumInputMetadata,
             undefined,
         );
-        const childSelection = createSelection<string, Selection<string, object, object>>(
+
+        const result = (parentSelection as any).$on((it: any) => it.id);
+        expect(result.fieldMap.has("__typename")).toBe(false);
+        expect(result.fieldMap.has("...")).toBe(true);
+    });
+
+    it("$on throws when typeName cannot be resolved", () => {
+        const nodeType = makeType("OnUnknownTypeRoot", ["id"]);
+        const selection = createSelection<string, Selection<string, object, object>>(
             nodeType,
             enumInputMetadata,
             undefined,
         );
 
-        const result = (parentSelection as any).$on((childSelection as any).id);
-        expect(result.fieldMap.has("__typename")).toBe(false);
-        expect(result.fieldMap.has("...")).toBe(true);
+        expect(() =>
+            (selection as any).$on("NeverRegisteredType", (it: any) => it.id),
+        ).toThrow('Cannot resolve schema type "NeverRegisteredType" for $on');
+    });
+
+    it("$on throws when arguments are invalid", () => {
+        const nodeType = makeType("OnInvalidArgsRoot", ["id"]);
+        const selection = createSelection<string, Selection<string, object, object>>(
+            nodeType,
+            enumInputMetadata,
+            undefined,
+        );
+
+        expect(() => (selection as any).$on("OnlyTypeName")).toThrow(
+            "$on requires a builder or (typeName, builder) arguments",
+        );
+    });
+
+    it("$use throws when argument is not a fragment spread", () => {
+        const nodeType = makeType("UseInvalidArgsRoot", ["id"]);
+        const selection = createSelection<string, Selection<string, object, object>>(
+            nodeType,
+            enumInputMetadata,
+            undefined,
+        );
+
+        expect(() => (selection as any).$use((selection as any).id)).toThrow(
+            "$use requires a fragment created by fragment$",
+        );
     });
 });

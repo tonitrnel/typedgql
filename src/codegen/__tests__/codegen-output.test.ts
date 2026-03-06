@@ -266,8 +266,8 @@ describe("Codegen output (blog schema)", () => {
 
         // posts field takes limit/offset args
         expect(content).toContain("posts");
-        // query$ instance but no query$$ (Query has no scalar fields for default)
-        expect(content).toContain("export const query$: QuerySelection<{}, {}>");
+        // query$ function-style root builder
+        expect(content).toContain("export function query$<");
     });
 
     it("post-selection.ts contains nested type references", async () => {
