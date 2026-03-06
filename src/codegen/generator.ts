@@ -528,6 +528,7 @@ export class Generator {
     if (this.hasGeneratedInputs(schema)) {
       stream.write(`export * from './__generated/inputs';\n`);
     }
+    stream.write(`export type * from './__generated/selections';\n`);
     stream.write(`export type * from './__generated/type-hierarchy';\n`);
   }
 
