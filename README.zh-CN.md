@@ -23,6 +23,7 @@ pnpm add -D graphql typescript
 进阶内容（Subscription、指令、GraphQL 对照）见：
 
 - [typedgql 进阶用法（中文）](./docs/advanced-usage.zh-CN.md)
+- [typedgql 运行时接入指南（中文）](./docs/runtime-integration.zh-CN.md)
 
 ### 1. Vite 插件方式（推荐）
 

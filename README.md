@@ -31,6 +31,7 @@ pnpm add -D graphql typescript
 For advanced usage (Subscription, directives, GraphQL mapping), see:
 
 - [Advanced Usage (Chinese)](./docs/advanced-usage.zh-CN.md)
+- [Runtime Integration Guide (Chinese)](./docs/runtime-integration.zh-CN.md)
 
 ### 1. Vite Plugin (Recommended)
 
