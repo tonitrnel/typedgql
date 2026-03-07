@@ -124,9 +124,13 @@ describe("Writer", () => {
       stream,
       options({
         scalarTypeMap: {
-          Decimal: { typeName: "Decimal", importSource: "shared/scalars" },
-          Big: { typeName: "Big", importSource: "shared/scalars" },
+          Decimal: "Decimal",
+          Big: "Big",
         },
+        scalarTypeDeclarations: `
+export type Decimal = number;
+export type Big = bigint;
+`,
       }),
       {
         prepare: (w) => {
@@ -149,7 +153,7 @@ describe("Writer", () => {
     expect(text).toContain("import { a } from 'alpha';");
     expect(text).toContain("import type {TestInput} from '../inputs';");
     expect(text).toContain("import type {TestEnum} from '../enums';");
-    expect(text).toContain("import type { Big, Decimal } from '../../shared/scalars';");
+    expect(text).toContain("import type { UserScalarTypes } from '../scalar-types';");
     expect(text).toContain("\nexport const ok = true;\n");
 
     expect(text.indexOf("import { a } from 'alpha';")).toBeLessThan(
@@ -174,8 +178,9 @@ describe("Writer", () => {
       stream,
       options({
         scalarTypeMap: {
-          Money: { typeName: "Money", importSource: "types/scalars" },
+          Money: "Money",
         },
+        scalarTypeDeclarations: `export type Money = number;`,
       }),
       {
         prepare: (w) => {
@@ -195,7 +200,7 @@ describe("Writer", () => {
     const text = stream.toString();
     expect(text).not.toContain("LocalInput");
     expect(text).toContain("import type {RemoteEnum} from './enums';");
-    expect(text).toContain("import type { Money } from '../types/scalars';");
+    expect(text).toContain("import type { UserScalarTypes } from './scalar-types';");
   });
 
   it("renders GraphQL/TS types and hits guard errors", () => {
@@ -242,5 +247,32 @@ describe("Writer", () => {
         },
       }).write(),
     ).toThrow("Unknown scalar type UnknownScalar");
+  });
+
+  it("maps configured scalars to UserScalarTypes.<ScalarName>", () => {
+    const stream = new MemoryWriteStream();
+    const writer = new TestWriter(
+      stream,
+      options({
+        scalarTypeMap: {
+          JSON: "Record<string, unknown>",
+        },
+      }),
+      {
+        prepare: (w) => {
+          w.addType(new GraphQLScalarType({ name: "JSON" }));
+        },
+        code: (w) => {
+          w.out("type J = ");
+          w.renderType(new GraphQLScalarType({ name: "JSON" }));
+          w.out(";\n");
+        },
+      },
+    );
+
+    writer.write();
+    const text = stream.toString();
+    expect(text).toContain("import type { UserScalarTypes } from '../scalar-types';");
+    expect(text).toContain("type J = UserScalarTypes.JSON;");
   });
 });

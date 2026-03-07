@@ -21,8 +21,10 @@ import { TypeHierarchyWriter } from "./writers/types";
 import { TypeHierarchyGraph } from "./type-hierarchy-graph";
 import { SelectionContext } from "./selection-context";
 import { EnumInputMetadataWriter } from "./writers/enum-input-metadata";
-import { isExcludedTypeName, targetTypeOf, toKebabCase } from "./utils";
+import { isExcludedTypeName, targetTypeOf, toKebabCase } from "./utils"; 
 import ASYNC_CODE from "./templates/async-runtime.template?raw";
+import { SCALAR_TYPES_NAMESPACE } from "./imports";
+import { analyzeScalarTypeDeclarations } from "./scalar-type-declarations";
 
 /** Default output directory: node_modules/@ptdgrp/typedgql/__generated */
 const DEFAULT_TARGET_DIR = resolve(
@@ -63,6 +65,7 @@ export class Generator {
   async generate() {
     const schema = await this.options.schemaLoader();
     this.validateSchema(schema);
+    this.validateScalarTypeDeclarations();
 
     await rm(this.targetDir, { recursive: true, force: true });
     await mkdir(this.targetDir, { recursive: true });
@@ -191,6 +194,9 @@ export class Generator {
     promises.push(this.generateTypeHierarchy(schema, typeHierarchy));
     promises.push(this.generateEnumInputMetadata(schema));
     promises.push(this.generateAsyncRuntime());
+    if (this.hasScalarTypes()) {
+      promises.push(this.generateScalarTypes());
+    }
     promises.push(this.writeIndex(schema, ctx));
 
     await Promise.all(promises);
@@ -349,6 +355,49 @@ export class Generator {
     await endStream(stream);
   }
 
+  private async generateScalarTypes() {
+    const stream = createStream(join(this.targetDir, "scalar-types.ts"));
+    const analysis = analyzeScalarTypeDeclarations(
+      this.options.scalarTypeDeclarations,
+    );
+    const code = this.options.scalarTypeDeclarations?.trim();
+    if (code && code.length !== 0) {
+      const indented = code
+        .split("\n")
+        .map((line) => (line.length === 0 ? line : `  ${line}`))
+        .join("\n");
+      stream.write(`export declare namespace ${SCALAR_TYPES_NAMESPACE} {\n`);
+      stream.write(`${indented}\n`);
+      this.writeScalarMapAliases(stream, analysis.exportedNames);
+      stream.write("}\n");
+    } else {
+      const scalarMap = this.options.scalarTypeMap;
+      if (scalarMap && Object.keys(scalarMap).length !== 0) {
+        stream.write(`export declare namespace ${SCALAR_TYPES_NAMESPACE} {\n`);
+        this.writeScalarMapAliases(stream, analysis.exportedNames);
+        stream.write("}\n");
+      } else {
+        stream.write("export {};\n");
+      }
+    }
+    await endStream(stream);
+  }
+
+  private writeScalarMapAliases(
+    stream: WriteStream,
+    exportedNames: ReadonlySet<string>,
+  ) {
+    const scalarMap = this.options.scalarTypeMap;
+    if (!scalarMap) return;
+    const entries = Object.entries(scalarMap).sort((a, b) =>
+      a[0].localeCompare(b[0]),
+    );
+    for (const [scalarName, mappedType] of entries) {
+      if (exportedNames.has(scalarName)) continue;
+      stream.write(`  export type ${scalarName} = ${mappedType};\n`);
+    }
+  }
+
   private async writeIndex(schema: GraphQLSchema, ctx: SelectionContext) {
     const stream = createStream(join(this.targetDir, "index.ts"));
     const selectionSuffix = this.options.selectionSuffix ?? "Selection";
@@ -367,6 +416,11 @@ export class Generator {
     stream.write(
       `import { ENUM_INPUT_METADATA } from "./enum-input-metadata";\n\n`,
     );
+    if (this.hasScalarTypes()) {
+      stream.write(
+        `export type { ${SCALAR_TYPES_NAMESPACE} } from "./scalar-types";\n`,
+      );
+    }
     stream.write(
       `export type { GraphQLExecutor, GraphQLSubscriber, Simplify } from "./client-runtime";\n`,
     );
@@ -496,6 +550,11 @@ export class Generator {
     // Re-export everything from the generated __generated/index.ts
     // (includes execute, setGraphQLExecutor, ImplementationType, upcastTypes, etc.)
     stream.write(`export * from './__generated/index';\n`);
+    if (this.hasScalarTypes()) {
+      stream.write(
+        `export type { ${SCALAR_TYPES_NAMESPACE} } from './__generated/scalar-types';\n`,
+      );
+    }
     stream.write(
       `export type { Selection, ExecutableSelection, ShapeOf, VariablesOf, Expand, FieldSelection, DirectiveArgs, EnumInputMetadata, EnumInputMetaType, AcceptableVariables, UnresolvedVariables, ValueOrThunk, SchemaType, SchemaField, SchemaTypeCategory, SchemaFieldCategory, FieldOptions } from './dist/index.mjs';\n`,
     );
@@ -673,6 +732,24 @@ export class Generator {
         }
       }
     }
+  }
+
+  private validateScalarTypeDeclarations(): void {
+    analyzeScalarTypeDeclarations(this.options.scalarTypeDeclarations);
+    const scalarMap = this.options.scalarTypeMap;
+    if (!scalarMap) return;
+    for (const scalarName of Object.keys(scalarMap)) {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(scalarName)) {
+        throw new Error(`scalarTypeMap key '${scalarName}' is not identifier`);
+      }
+    }
+  }
+
+  private hasScalarTypes(): boolean {
+    return (
+      (this.options.scalarTypeDeclarations?.trim().length ?? 0) !== 0 ||
+      Object.keys(this.options.scalarTypeMap ?? {}).length !== 0
+    );
   }
 }
 

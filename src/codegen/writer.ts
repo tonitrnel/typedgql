@@ -13,6 +13,7 @@ import {
   GraphQLUnionType,
 } from "graphql";
 import { CodegenOptions } from "./options";
+import { CODEGEN_IMPORT_SOURCE_MAP, SCALAR_TYPES_NAMESPACE } from "./imports";
 
 export type ScopeType = "blank" | "block" | "parameters" | "array" | "generic";
 
@@ -80,7 +81,7 @@ export abstract class Writer {
   private needIndent = false;
   private readonly importStatements = new Set<string>();
   private readonly importedTypes = new Set<GraphQLNamedType>();
-  private readonly importedScalarTypes = new Map<string, Set<string>>();
+  private usesScalarTypeNamespaceImport = false;
   private importFinalized = false;
 
   constructor(
@@ -147,11 +148,9 @@ export abstract class Writer {
     }
     if (namedType instanceof GraphQLScalarType && this.options.scalarTypeMap) {
       const mapped = this.options.scalarTypeMap[namedType.name];
-      if (typeof mapped !== "object") return;
-      const set =
-        this.importedScalarTypes.get(mapped.importSource) ?? new Set();
-      set.add(mapped.typeName);
-      this.importedScalarTypes.set(mapped.importSource, set);
+      if (mapped) {
+        this.usesScalarTypeNamespaceImport = true;
+      }
     }
   }
 
@@ -268,10 +267,14 @@ export abstract class Writer {
       return;
     }
     if (type instanceof GraphQLScalarType) {
-      const mapped =
-        this.options.scalarTypeMap?.[type.name] ?? SCALAR_MAP[type.name];
-      if (!mapped) throw new Error(`Unknown scalar type ${type.name}`);
-      this.text(typeof mapped === "string" ? mapped : mapped.typeName);
+      const mapped = this.options.scalarTypeMap?.[type.name];
+      if (mapped) {
+        this.text(`${SCALAR_TYPES_NAMESPACE}.${type.name}`);
+        return;
+      }
+      const fallback = SCALAR_MAP[type.name];
+      if (!fallback) throw new Error(`Unknown scalar type ${type.name}`);
+      this.text(fallback);
       return;
     }
     if (
@@ -336,16 +339,14 @@ export abstract class Writer {
   }
 
   private writeMappedScalarImports(): void {
-    if (this.importedScalarTypes.size === 0) return;
-    const sourcePrefix = this.isUnderGlobalDir() ? "../" : "../../";
-    const sortedEntries = Array.from(this.importedScalarTypes.entries()).sort(
-      (a, b) => a[0].localeCompare(b[0]),
+    if (!this.usesScalarTypeNamespaceImport) return;
+    const source = CODEGEN_IMPORT_SOURCE_MAP.SCALAR_TYPE_NAMESPACE.source;
+    const importSource = this.isUnderGlobalDir()
+      ? source.replace(/^\.\.\//, "./")
+      : source;
+    this.stream.write(
+      `import type { ${SCALAR_TYPES_NAMESPACE} } from '${importSource}';\n`,
     );
-    for (const [importSource, typeNames] of sortedEntries) {
-      this.stream.write(
-        `import type { ${Array.from(typeNames).sort().join(", ")} } from '${sourcePrefix}${importSource}';\n`,
-      );
-    }
   }
 
   protected typeApplication(typeName: string, renderTypeArg: () => void): void {
@@ -408,7 +409,7 @@ export abstract class Writer {
     return (
       this.importStatements.size !== 0 ||
       this.importedTypes.size !== 0 ||
-      this.importedScalarTypes.size !== 0
+      this.usesScalarTypeNamespaceImport
     );
   }
 

@@ -172,4 +172,31 @@ describe("Generator validation", () => {
     await runGenerate(schemaWarn);
     expect(warn).not.toHaveBeenCalled();
   });
+
+  it("validates scalarTypeDeclarations only allows type/interface declarations", async () => {
+    const Query = new GraphQLObjectType({
+      name: "Query",
+      fields: {
+        ping: { type: GraphQLString },
+      },
+    });
+    const schema = new GraphQLSchema({ query: Query });
+
+    await expect(
+      runGenerate(schema, {
+        scalarTypeDeclarations: `
+type JsonValue = string | number;
+export type JsonObject = { value: JsonValue };
+`,
+      }),
+    ).resolves.toBeUndefined();
+
+    await expect(
+      runGenerate(schema, {
+        scalarTypeDeclarations: `export const X = 1;`,
+      }),
+    ).rejects.toThrow(
+      "scalarTypeDeclarations statement[0] must be type/interface declaration",
+    );
+  });
 });

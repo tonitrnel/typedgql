@@ -84,6 +84,8 @@ export class JSImportCollector<TSymbol extends string = string> {
 const RUNTIME_ENTRY_SOURCE = "../../dist/index.mjs";
 const TYPE_HIERARCHY_SOURCE = "../type-hierarchy";
 const ENUM_INPUT_METADATA_SOURCE = "../enum-input-metadata";
+const SCALAR_TYPES_SOURCE = "../scalar-types";
+export const SCALAR_TYPES_NAMESPACE = "UserScalarTypes";
 
 export const CODEGEN_IMPORT_SOURCE_MAP = {
   AcceptableVariables: { source: RUNTIME_ENTRY_SOURCE, kind: "type" },
@@ -100,6 +102,7 @@ export const CODEGEN_IMPORT_SOURCE_MAP = {
   registerSchemaTypeFactory: { source: RUNTIME_ENTRY_SOURCE, kind: "value" },
   resolveRegisteredSchemaType: { source: RUNTIME_ENTRY_SOURCE, kind: "value" },
   ENUM_INPUT_METADATA: { source: ENUM_INPUT_METADATA_SOURCE, kind: "value" },
+  SCALAR_TYPE_NAMESPACE: { source: SCALAR_TYPES_SOURCE, kind: "type" },
   WithTypeName: { source: TYPE_HIERARCHY_SOURCE, kind: "type" },
   ImplementationType: { source: TYPE_HIERARCHY_SOURCE, kind: "type" },
   EnumInputMetadataBuilder: {

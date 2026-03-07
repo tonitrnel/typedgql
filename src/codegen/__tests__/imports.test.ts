@@ -41,6 +41,7 @@ describe("JSImportCollector", () => {
     expect(CODEGEN_IMPORT_SOURCE_MAP.Selection.kind).toBe("type");
     expect(CODEGEN_IMPORT_SOURCE_MAP.createSelection.source).toBe("../../dist/index.mjs");
     expect(CODEGEN_IMPORT_SOURCE_MAP.ENUM_INPUT_METADATA.source).toBe("../enum-input-metadata");
+    expect(CODEGEN_IMPORT_SOURCE_MAP.SCALAR_TYPE_NAMESPACE.source).toBe("../scalar-types");
   });
 
   it("keeps enum-input-metadata writer import source map stable", () => {

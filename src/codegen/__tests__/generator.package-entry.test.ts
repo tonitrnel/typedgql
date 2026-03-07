@@ -39,6 +39,7 @@ function makeGenerator(excludedTypes?: string[]) {
     },
     targetDir: join(process.cwd(), "__tmp-never-used"),
     excludedTypes,
+    scalarTypeDeclarations: undefined,
   });
 }
 
@@ -137,6 +138,30 @@ describe("Generator package entrypoint helpers", () => {
     expect(output).toContain("export * from './__generated/inputs';");
     expect(output).toContain("export type * from './__generated/selections';");
     expect(output).toContain("export type * from './__generated/type-hierarchy';");
+  });
+
+  it("writePackageIndexCode re-exports UserScalarTypes when scalar declarations exist", () => {
+    const schema = makeSchema(false);
+    let output = "";
+    const stream = {
+      write: (chunk: string) => {
+        output += chunk;
+        return true;
+      },
+    };
+
+    const generator = new Generator({
+      schemaLoader: async () => {
+        throw new Error("not used");
+      },
+      targetDir: join(process.cwd(), "__tmp-never-used"),
+      scalarTypeDeclarations: "export type JsonObject = Record<string, unknown>;",
+    });
+    (generator as any).writePackageIndexCode(stream, schema, {});
+
+    expect(output).toContain(
+      "export type { UserScalarTypes } from './__generated/scalar-types';",
+    );
   });
 
   it("writePackageEntrypoint writes index.ts and respects excluded enums/inputs", async () => {

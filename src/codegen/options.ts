@@ -55,17 +55,24 @@ export interface CodegenOptions {
   /**
    * Scalar type mapping for generated TypeScript types.
    *
-   * - String form: directly uses the provided TS type name.
-   * - Object form: uses `typeName` and emits an import from `importSource`.
+   * Each mapped scalar is exposed as `UserScalarTypes.<ScalarName>` in generated
+   * files, and codegen emits `export type <ScalarName> = <mappedType>` inside
+   * generated `scalar-types.ts`.
    *
    * Example:
-   * `DateTime: { typeName: "DateTimeISO", importSource: "types/scalars" }`
+   * `{ JSON: "JsonObject", DateTime: "string" }`
    */
   readonly scalarTypeMap?: {
-    readonly [key: string]:
-      | string
-      | { readonly typeName: string; readonly importSource: string };
+    readonly [key: string]: string;
   };
+  /**
+   * TypeScript declaration source emitted into generated `scalar-types.ts` namespace.
+   *
+   * Only `type/interface` declarations are allowed.
+   * Exported declarations are visible for consumers, and non-exported ones can
+   * be used as private helper types inside the namespace.
+   */
+  readonly scalarTypeDeclarations?: string;
   /**
    * Override ID field name per GraphQL object/interface type.
    *
