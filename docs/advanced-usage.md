@@ -63,6 +63,49 @@ fragment UserBase on User {
 
 `$on` is for inline fragments and does not emit a standalone `fragment Xxx on ...` definition.
 
+There are two forms, with different intent:
+
+- `$on(builder)`: no explicit type switch; keeps the current selection type context.
+- `$on(typeName, builder)`: explicit type branch; useful for interface/union narrowing.
+
+Minimal comparison:
+
+```ts
+query$((q) =>
+  q.viewer((u) =>
+    u.$on((it) => it.id.name), // no type switch, extend current type fields
+  ),
+);
+
+query$((q) =>
+  q.search((node) =>
+    node.$on("User", (u) => u.id.name), // explicit User branch
+  ),
+);
+```
+
+GraphQL equivalent (minimal comparison):
+
+```graphql
+query {
+  viewer {
+    ... {
+      id
+      name
+    }
+  }
+}
+
+query {
+  search {
+    ... on User {
+      id
+      name
+    }
+  }
+}
+```
+
 ```ts
 const selection = query$(
   (q) =>

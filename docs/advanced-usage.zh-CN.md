@@ -63,6 +63,49 @@ fragment UserBase on User {
 
 `$on` 用于 inline fragment，不会生成单独的 `fragment Xxx on ...` 定义。
 
+两种调用形式的区别：
+
+- `$on(builder)`：不指定类型名，沿用当前 selection 的类型上下文（常用于“同类型补字段”）。
+- `$on(typeName, builder)`：显式指定目标实现类型/成员类型（常用于接口或联合的类型分支）。
+
+最小对照：
+
+```ts
+query$((q) =>
+  q.viewer((u) =>
+    u.$on((it) => it.id.name), // 不切换类型，仅追加当前类型字段
+  ),
+);
+
+query$((q) =>
+  q.search((node) =>
+    node.$on("User", (u) => u.id.name), // 显式切到 User 分支
+  ),
+);
+```
+
+对应 GraphQL（最小对照）：
+
+```graphql
+query {
+  viewer {
+    ... {
+      id
+      name
+    }
+  }
+}
+
+query {
+  search {
+    ... on User {
+      id
+      name
+    }
+  }
+}
+```
+
 ```ts
 const selection = query$(
   (q) =>
