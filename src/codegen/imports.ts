@@ -90,6 +90,8 @@ export const CODEGEN_IMPORT_SOURCE_MAP = {
   UnresolvedVariables: { source: RUNTIME_ENTRY_SOURCE, kind: "type" },
   DirectiveArgs: { source: RUNTIME_ENTRY_SOURCE, kind: "type" },
   Selection: { source: RUNTIME_ENTRY_SOURCE, kind: "type" },
+  ShapeOf: { source: RUNTIME_ENTRY_SOURCE, kind: "type" },
+  VariablesOf: { source: RUNTIME_ENTRY_SOURCE, kind: "type" },
   ValueOrThunk: { source: RUNTIME_ENTRY_SOURCE, kind: "type" },
   FragmentSpread: { source: RUNTIME_ENTRY_SOURCE, kind: "type" },
   createSelection: { source: RUNTIME_ENTRY_SOURCE, kind: "value" },
@@ -114,6 +116,8 @@ export type SelectionImportSymbol = Extract<
   | "UnresolvedVariables"
   | "DirectiveArgs"
   | "Selection"
+  | "ShapeOf"
+  | "VariablesOf"
   | "ValueOrThunk"
   | "FragmentSpread"
   | "createSelection"

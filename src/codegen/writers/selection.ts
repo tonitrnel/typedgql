@@ -234,6 +234,8 @@ export class SelectionWriter extends Writer {
       imports.useMapped("withOperationName");
     }
     if (!isOperationRootTypeName(this.modelType.name)) {
+      imports.useMapped("ShapeOf");
+      imports.useMapped("VariablesOf");
       imports.useMapped("WithTypeName");
       imports.useMapped("ImplementationType");
       imports.useMapped("ValueOrThunk");
@@ -365,37 +367,38 @@ export class SelectionWriter extends Writer {
     const fragmentTypeName = this.fragmentTypeNameType();
     const inlineSelectionFor = (xName: string, data: string, vars: string) =>
       this.fragmentSelectionTypeForModel(xName, data, vars);
-    const mergedDataType = `XName extends '${modelName}' ?\nT & X :\nWithTypeName<T, ${fragmentTypeName}> & (WithTypeName<X, ImplementationType<XName>> | {__typename: Exclude<${fragmentTypeName}, ImplementationType<XName>>})`;
+    const mergedDataTypeForOn = `XName extends '${modelName}' ?\nT & ShapeOf<XSelection> :\nWithTypeName<T, ${fragmentTypeName}> & (WithTypeName<ShapeOf<XSelection>, ImplementationType<XName>> | {__typename: Exclude<${fragmentTypeName}, ImplementationType<XName>>})`;
+    const mergedDataTypeForUse = `XName extends '${modelName}' ?\nT & X :\nWithTypeName<T, ${fragmentTypeName}> & (WithTypeName<X, ImplementationType<XName>> | {__typename: Exclude<${fragmentTypeName}, ImplementationType<XName>>})`;
 
-    t("\n$on<X extends object, XVariables extends object>");
+    t(`\n$on<XSelection extends ${selfSelectionType}<object, object>>`);
     this.scope({ type: "parameters", multiLines: true }, () => {
       t(
-        `builder: (it: ${selfSelectionType}<{}, {}>) => ${selfSelectionType}<X, XVariables>`,
+        `builder: (it: ${selfSelectionType}<{}, {}>) => XSelection`,
       );
     });
     t(`: ${this.selectionTypeName}`);
     this.scope({ type: "generic", multiLines: true }, () => {
-      t("T & X");
+      t("T & ShapeOf<XSelection>");
       this.separator(", ");
-      t("TVariables & XVariables");
+      t("TVariables & VariablesOf<XSelection>");
     });
     t(";\n");
 
     t(
-      `\n$on<XName extends ${fragmentTypeName}, X extends object, XVariables extends object>`,
+      `\n$on<const XName extends ${fragmentTypeName}, XSelection extends ${inlineSelectionFor("XName", "object", "object")}>`,
     );
     this.scope({ type: "parameters", multiLines: true }, () => {
       t("typeName: XName");
       this.separator(", ");
       t(
-        `builder: (it: ${inlineSelectionFor("XName", "{}", "{}")}) => ${inlineSelectionFor("XName", "X", "XVariables")}`,
+        `builder: (it: ${inlineSelectionFor("XName", "{}", "{}")}) => XSelection`,
       );
     });
     t(`: ${this.selectionTypeName}`);
     this.scope({ type: "generic", multiLines: true }, () => {
-      t(mergedDataType);
+      t(mergedDataTypeForOn);
       this.separator(", ");
-      t("TVariables & XVariables");
+      t("TVariables & VariablesOf<XSelection>");
     });
     t(";\n");
 
@@ -407,7 +410,7 @@ export class SelectionWriter extends Writer {
     });
     t(`: ${this.selectionTypeName}`);
     this.scope({ type: "generic", multiLines: true }, () => {
-      t(mergedDataType);
+      t(mergedDataTypeForUse);
       this.separator(", ");
       t("TVariables & XVariables");
     });

@@ -23,6 +23,10 @@ export function setGraphQLSubscriber(subscriber: GraphQLSubscriber) {
 export type Simplify<T> = SimplifyDepth<T>;
 type Primitive = string | number | boolean | bigint | symbol | null | undefined;
 type Dec = [0,0,1,2,3,4,5,6,7,8,9];
+type GraphQLRawResponse = {
+  readonly data?: unknown;
+  readonly errors?: unknown;
+};
 export type SimplifyDepth<T, D extends number = 5> =
   D extends 0 ? T :
   T extends Primitive | Function ? T :
@@ -52,7 +56,7 @@ export async function execute<
   const request = buildRequest(selection, options?.operationName);
   const rawResponse = exceptNullValues(
     await executor(request, options?.variables ?? {}),
-  );
+  ) as GraphQLRawResponse;
   // GraphQL transport errors are surfaced as exceptions.
   if (rawResponse.errors) {
     throw new GraphQLError(rawResponse.errors);
@@ -83,7 +87,7 @@ export async function* subscribe<
   const stream = await subscriber(request, options?.variables ?? {});
   // Stream payloads follow standard GraphQL response shape.
   for await (const payload of stream) {
-    const rawResponse = exceptNullValues(payload);
+    const rawResponse = exceptNullValues(payload) as GraphQLRawResponse;
     if (rawResponse.errors) {
       throw new GraphQLError(rawResponse.errors);
     }

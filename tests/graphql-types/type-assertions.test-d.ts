@@ -19,6 +19,7 @@ const postBaseFragment = fragment$("Post", (p) => p.id.title, "PostBase");
 // $on typing
 query$((q) => q.viewer((u) => u.$on((it) => it.id.name)));
 query$((q) => q.viewer((u) => u.$on("User", (it) => it.id.email)));
+expectError(query$((q) => q.viewer((u) => u.$on("", (it) => it))));
 expectError(query$((q) => q.viewer((u) => u.$on("Post", (it) => it))));
 expectError(query$((q) => q.viewer((u) => u.$on("User", (it) => it.missing))));
 expectError(query$((q) => q.viewer((u) => u.$on("User"))));
@@ -26,6 +27,12 @@ const viewerWithOn = query$((q) => q.viewer((u) => u.$on((it) => it.id.email)));
 expectAssignable<{
   readonly viewer: { readonly id: string; readonly email: string };
 }>(null as unknown as ShapeOf<typeof viewerWithOn>);
+const viewerWithOnTyped = query$((q) =>
+  q.viewer((u) => u.$on("User", (it) => it.id.email)),
+);
+expectAssignable<{
+  readonly viewer: { readonly id: string; readonly email: string };
+}>(null as unknown as ShapeOf<typeof viewerWithOnTyped>);
 
 // $use typing
 query$((q) => q.viewer((u) => u.$use(userBaseFragment)));
