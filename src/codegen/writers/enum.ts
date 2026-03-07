@@ -15,6 +15,16 @@ export class EnumWriter extends Writer {
   protected writeCode() {
     const t = this.text.bind(this);
     const values = this.enumType.getValues();
+    const hasValueDocs = values.some(
+      (v) => v.description?.trim() || v.deprecationReason?.trim(),
+    );
+
+    this.writeJsDoc(
+      this.enumType.description?.trim(),
+      this.enumType.astNode?.directives?.some((d) => d.name.value === "deprecated")
+        ? "Deprecated enum type"
+        : undefined,
+    );
 
     if (
       this.options.tsEnum === true ||
@@ -33,6 +43,7 @@ export class EnumWriter extends Writer {
         () => {
           for (const value of values) {
             this.separator(", ");
+            this.writeJsDoc(value.description?.trim(), value.deprecationReason?.trim());
             if (this.options.tsEnum === "string") {
               t(value.name);
               t(" = ");
@@ -54,11 +65,12 @@ export class EnumWriter extends Writer {
         {
           type: "blank",
           suffix: ";\n",
-          multiLines: values.length > 3,
+          multiLines: values.length > 3 || hasValueDocs,
         },
         () => {
           for (const value of values) {
             this.separator(" | ");
+            this.writeJsDoc(value.description?.trim(), value.deprecationReason?.trim());
             t("'");
             t(value.name);
             t("'");
@@ -66,5 +78,31 @@ export class EnumWriter extends Writer {
         },
       );
     }
+  }
+
+  private writeJsDoc(description?: string, deprecationReason?: string) {
+    if (!description && !deprecationReason) {
+      return;
+    }
+
+    const t = this.text.bind(this);
+    t("/**\n");
+    if (description) {
+      for (const line of this.escapeJsDoc(description).split("\n")) {
+        t(" * ");
+        t(line);
+        t("\n");
+      }
+    }
+    if (deprecationReason) {
+      t(" * @deprecated ");
+      t(this.escapeJsDoc(deprecationReason));
+      t("\n");
+    }
+    t(" */\n");
+  }
+
+  private escapeJsDoc(value: string): string {
+    return value.replaceAll("*/", "*\\/");
   }
 }

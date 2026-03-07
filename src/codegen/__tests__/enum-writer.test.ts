@@ -17,9 +17,10 @@ function makeStream(): { stream: WriteStream; getOutput: () => string } {
 
 const enumType = new GraphQLEnumType({
   name: "Role",
+  description: "User role in system",
   values: {
-    ADMIN: { value: "ADMIN" },
-    USER: { value: "USER" },
+    ADMIN: { value: "ADMIN", description: "Administrator" },
+    USER: { value: "USER", deprecationReason: "Use MEMBER instead" },
     GUEST: { value: "GUEST" },
     OPERATOR: { value: "OPERATOR" },
   },
@@ -44,6 +45,9 @@ describe("EnumWriter", () => {
     expect(out).toContain("'ADMIN'");
     expect(out).toContain("'USER'");
     expect(out).toContain(" | ");
+    expect(out).toContain("User role in system");
+    expect(out).toContain("Administrator");
+    expect(out).toContain("@deprecated Use MEMBER instead");
   });
 
   it("emits TypeScript enum for tsEnum=true and tsEnum='number'", () => {
@@ -68,5 +72,8 @@ describe("EnumWriter", () => {
     expect(out).toContain("export enum Role");
     expect(out).toContain("ADMIN = 'ADMIN'");
     expect(out).toContain("USER = 'USER'");
+    expect(out).toContain("User role in system");
+    expect(out).toContain("Administrator");
+    expect(out).toContain("@deprecated Use MEMBER instead");
   });
 });

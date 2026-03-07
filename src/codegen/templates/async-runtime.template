@@ -4,12 +4,12 @@ import { TextBuilder, runtimeOf } from "../dist/index.mjs";
 export type GraphQLExecutor = (
   request: string,
   variables: Record<string, unknown>,
-) => Promise<any>;
+) => Promise<unknown>;
 
 export type GraphQLSubscriber = (
   request: string,
   variables: Record<string, unknown>,
-) => AsyncIterable<any> | Promise<AsyncIterable<any>>;
+) => AsyncIterable<unknown> | Promise<AsyncIterable<unknown>>;
 
 // Set global fallback executor used by `execute(...)`.
 export function setGraphQLExecutor(executor: GraphQLExecutor) {
@@ -99,9 +99,9 @@ export interface Response<TData> {
 export class GraphQLError extends Error {
   readonly errors: readonly GraphQLSubError[];
 
-  constructor(errors: any) {
+  constructor(errors: unknown) {
     super();
-    this.errors = errors;
+    this.errors = normalizeGraphQLErrors(errors);
   }
 }
 
@@ -112,6 +112,24 @@ export interface GraphQLSubError {
 
 let graphQLExecutor: GraphQLExecutor | undefined = undefined;
 let graphQLSubscriber: GraphQLSubscriber | undefined = undefined;
+
+function normalizeGraphQLErrors(errors: unknown): readonly GraphQLSubError[] {
+  if (!Array.isArray(errors)) {
+    return [{ message: "Unknown GraphQL error", path: [] }];
+  }
+  return errors.map((item) => {
+    if (!item || typeof item !== "object") {
+      return { message: String(item), path: [] };
+    }
+    const rec = item as Record<string, unknown>;
+    return {
+      message: typeof rec.message === "string" ? rec.message : "Unknown GraphQL error",
+      path: Array.isArray(rec.path)
+        ? rec.path.filter((p): p is string => typeof p === "string")
+        : [],
+    };
+  });
+}
 
 // Build GraphQL document from selection tree and inferred variable declarations.
 function buildRequest<

@@ -130,4 +130,35 @@ describe("Runtime + codegen integration (subscription)", () => {
     expect(outputs).toHaveLength(1);
     expect(outputs[0].postCreated?.id).toBe("p1");
   });
+
+  it("normalizes malformed GraphQL errors from subscriber payload", async () => {
+    const runtimeMod = (await import(pathToFileURL(GENERATED_INDEX_FILE).href)) as {
+      subscribe: any;
+    };
+    const selectionMod = (await import(pathToFileURL(SUBSCRIPTION_SELECTION_FILE).href)) as {
+      subscription$: any;
+    };
+
+    const selection = selectionMod.subscription$(
+      (s: any) => s.postCreated((p: any) => p.id),
+      "MalformedErrors",
+    );
+
+    async function* subscriber(_request: string): AsyncIterable<unknown> {
+      yield { errors: ["bad"] };
+    }
+
+    let caught: unknown;
+    try {
+      for await (const _payload of runtimeMod.subscribe(selection, { subscriber })) {
+        // no-op
+      }
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBeDefined();
+    expect(caught).toHaveProperty("errors");
+    expect((caught as { errors: Array<{ message: string }> }).errors[0]?.message).toBe("bad");
+  });
 });
