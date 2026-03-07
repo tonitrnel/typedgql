@@ -1,21 +1,21 @@
 ---
-title: typedgql 进阶用法（中文）
-description: typedgql 的进阶 API 与示例，包括 fragment、inline fragment、subscription、指令和类型提取。
+title: typedgql Advanced Usage
+description: Advanced typedgql APIs and examples, including fragments, inline fragments, subscriptions, directives, and type extraction.
 last_modified: 2026-03-07T01:19:00Z
 ---
 
-# typedgql 进阶用法（中文）
+# typedgql Advanced Usage
 
-本文档补充 `README.zh-CN.md` 的基础内容，重点覆盖：
+This document extends the basics in `README.md` and focuses on:
 
-- `query$ / mutation$ / subscription$` 与操作命名
-- `fragment$`、`$on`、`$use` 的定位与配合
-- `Subscription` 执行流程
-- 指令与内置方法
+- `query$ / mutation$ / subscription$` and operation naming
+- how `fragment$`, `$on`, and `$use` work together
+- subscription execution flow
+- directives and built-in selection methods
 
-## 1. 根操作与命名
+## 1. Root operations and naming
 
-你可以直接使用根选择器函数：
+You can use root selection builders directly:
 
 ```ts
 import { query$, mutation$, subscription$ } from "@ptdgrp/typedgql";
@@ -24,7 +24,7 @@ const q1 = query$((q) => q.posts((p) => p.id.title));
 const q2 = query$((q) => q.posts((p) => p.id.title), "PostsQuery");
 ```
 
-也可以通过聚合入口 `G` 调用（等价）：
+Or use the aggregated `G` entry (equivalent):
 
 ```ts
 import { G } from "@ptdgrp/typedgql";
@@ -34,7 +34,7 @@ const q = G.query((x) => x.posts((p) => p.id.title), "PostsQuery");
 
 ## 2. fragment / inline fragment
 
-### 2.1 `fragment$`（命名 fragment）
+### 2.1 `fragment$` (named fragment)
 
 ```ts
 import { fragment$, query$ } from "@ptdgrp/typedgql";
@@ -44,7 +44,7 @@ const userBase = fragment$("User", (u) => u.id.name, "UserBase");
 const selection = query$((q) => q.viewer((u) => u.$use(userBase)));
 ```
 
-对应 GraphQL：
+GraphQL equivalent:
 
 ```graphql
 query {
@@ -59,21 +59,23 @@ fragment UserBase on User {
 }
 ```
 
-### 2.2 `$on`（inline fragment）
+### 2.2 `$on` (inline fragment)
 
-`$on` 用于 inline fragment，不会生成单独的 `fragment Xxx on ...` 定义。
+`$on` is for inline fragments and does not emit a standalone `fragment Xxx on ...` definition.
 
 ```ts
 const selection = query$(
   (q) =>
     q.search((node) =>
-      node.$on("User", (u) => u.id.name).$on("Page", (p) => p.id.handle),
+      node
+        .$on("User", (u) => u.id.name)
+        .$on("Page", (p) => p.id.handle),
     ),
   "InlineFragmentTyping",
 );
 ```
 
-对应 GraphQL：
+GraphQL equivalent:
 
 ```graphql
 query InlineFragmentTyping {
@@ -90,23 +92,23 @@ query InlineFragmentTyping {
 }
 ```
 
-## 3. Subscription 用法
+## 3. Subscription usage
 
-前提：schema 存在 `Subscription` 根类型。
+Prerequisite: your schema includes a `Subscription` root type.
 
-### 3.1 注册 subscriber
+### 3.1 Register a subscriber
 
 ```ts
 import { setGraphQLSubscriber } from "@ptdgrp/typedgql";
 
 setGraphQLSubscriber(async (request, variables) => {
-  // 接入 graphql-ws / SSE / 自定义实时通道
-  // 返回 AsyncIterable<GraphQLResponse>
+  // Plug in graphql-ws / SSE / your own realtime channel
+  // Must return AsyncIterable<GraphQLResponse>
   return myGraphQLSubscribe(request, variables);
 });
 ```
 
-### 3.2 消费流
+### 3.2 Consume the stream
 
 ```ts
 import { subscription$, subscribe } from "@ptdgrp/typedgql";
@@ -121,7 +123,7 @@ for await (const payload of subscribe(selection)) {
 }
 ```
 
-对应 GraphQL：
+GraphQL equivalent:
 
 ```graphql
 subscription PostCreatedSub {
@@ -136,9 +138,9 @@ subscription PostCreatedSub {
 }
 ```
 
-## 4. 指令与内置方法
+## 4. Directives and built-ins
 
-常用内置方法：
+Common built-in methods:
 
 - `$include(condition)`
 - `$skip(condition)`
@@ -146,11 +148,11 @@ subscription PostCreatedSub {
 - `$alias(alias)`
 - `$omit(...fields)`
 - `$on(builder)` / `$on(typeName, builder)`
-- `$use(fragment)`（支持 `ValueOrThunk`，即值或 `() => 值`）
+- `$use(fragment)` (supports `ValueOrThunk`, i.e. value or `() => value`)
 
-注意：`$include/$skip/$directive` 在“有最近字段”时是字段级，否则是 selection 级。
+Note: `$include/$skip/$directive` are field-level when there is a last field; otherwise they apply to the selection.
 
-### 4.1 字段级 `$include` / `$skip`
+### 4.1 Field-level `$include` / `$skip`
 
 ```ts
 const selection = query$((q) =>
@@ -158,7 +160,7 @@ const selection = query$((q) =>
 );
 ```
 
-对应 GraphQL：
+GraphQL equivalent:
 
 ```graphql
 query {
@@ -170,7 +172,7 @@ query {
 }
 ```
 
-### 4.2 selection 级 `$directive`
+### 4.2 Selection-level `$directive`
 
 ```ts
 const selection = query$((q) =>
@@ -182,25 +184,13 @@ const selection = query$((q) =>
 
 ```ts
 const selection = query$((q) =>
-  q.post({ id: "p1" }, (p) =>
-    p.id.title.$alias("postTitle").content.$omit("content"),
-  ),
+  q.post({ id: "p1" }, (p) => p.id.title.$alias("postTitle").content.$omit("content")),
 );
 ```
 
-## 5. 参数与变量
+## 5. Parameters and variables
 
-推荐：selection 与变量值解耦。
-
-```ts
-import { query$, execute } from "@ptdgrp/typedgql";
-
-const selection = query$((q) => q.post({ id: "p1" }, (p) => p.id.title));
-
-await execute(selection);
-```
-
-使用变量占位：
+Recommended: keep selection reusable and pass variable values at execution time.
 
 ```ts
 import { query$, execute, ParameterRef } from "@ptdgrp/typedgql";
@@ -212,9 +202,9 @@ const selection = query$((q) =>
 await execute(selection, { variables: { postId: "p2" } });
 ```
 
-## 6. 如何提取 Fragment 的类型
+## 6. Extract fragment types
 
-`fragment$` 返回的是 `FragmentRef`。如果你要提取它的结果类型/变量类型，直接从 `selection` 上取即可：
+`fragment$` returns a `FragmentRef`. To extract shape/variables, read from its `selection`:
 
 ```ts
 import { fragment$, ShapeOf, VariablesOf } from "@ptdgrp/typedgql";
