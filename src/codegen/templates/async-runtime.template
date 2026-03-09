@@ -154,9 +154,9 @@ function buildRequest<
         suffix: " ",
       },
       () => {
-        for (const [name, type] of runtime.variableTypeMap) {
+        for (const [name, registration] of runtime.variableTypeMap) {
           writer.separator();
-          writer.text(`$${name}: ${type}`);
+          writer.text(`$${name}: ${registration.typeName}`);
         }
       },
     );

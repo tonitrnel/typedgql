@@ -24,7 +24,7 @@ export interface SelectionRuntime<E extends string = string> {
   readonly operationName?: string;
   readonly fieldMap: ReadonlyMap<string, FieldSelection>;
   readonly directiveMap: ReadonlyMap<string, DirectiveArgs>;
-  readonly variableTypeMap: ReadonlyMap<string, string>;
+  readonly variableTypeMap: ReadonlyMap<string, VariableTypeRegistration>;
 
   findField(fieldKey: string): FieldSelection | undefined;
   findFieldsByName(fieldName: string): readonly FieldSelection[];
@@ -65,6 +65,12 @@ export type Expand<T> =
         : T;
 
 export type ValueOrThunk<T> = T | (() => T);
+
+export interface VariableTypeRegistration {
+  readonly typeName: string;
+  readonly source: string;
+}
+
 export interface FieldSelection {
   readonly name: string;
   readonly argGraphQLTypes?: ReadonlyMap<string, string>;

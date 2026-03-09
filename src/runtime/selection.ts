@@ -8,6 +8,7 @@ import type {
   SelectionRuntime,
   FieldSelection,
   DirectiveArgs,
+  VariableTypeRegistration,
 } from "./types";
 import { StringValue } from "./types";
 import { ParameterRef, __marker } from "./parameter";
@@ -191,7 +192,7 @@ export class SelectionImpl<
     return (this._directiveMap ??= this._buildDirectiveMap());
   }
 
-  get variableTypeMap(): ReadonlyMap<string, string> {
+  get variableTypeMap(): ReadonlyMap<string, VariableTypeRegistration> {
     return this._serialize().variableTypeMap;
   }
 
@@ -341,7 +342,7 @@ export const withOperationName = <S extends Selection<string, object, object>>(
 interface SerializedResult {
   readonly text: string;
   readonly fragmentText: string;
-  readonly variableTypeMap: ReadonlyMap<string, string>;
+  readonly variableTypeMap: ReadonlyMap<string, VariableTypeRegistration>;
 }
 
 const serialize = (
@@ -393,7 +394,7 @@ class SerializeContext {
     ExecutableSelection<string, object, object>,
     Map<string, string>
   >();
-  readonly variableTypeMap: Map<string, string>;
+  readonly variableTypeMap: Map<string, VariableTypeRegistration>;
 
   constructor(
     private readonly writer: TextBuilder,
@@ -426,7 +427,12 @@ class SerializeContext {
         t(name);
         if (field.argGraphQLTypes) {
           const meta = (sel as any)._enumInputMetadata as EnumInputMetadata;
-          this.acceptArgs(field.args, field.argGraphQLTypes, meta);
+          this.acceptArgs(
+            field.args,
+            field.argGraphQLTypes,
+            meta,
+            `field '${runtime.schemaType.name}.${name}'`,
+          );
         }
         this.acceptDirectives(field.fieldOptionsValue?.directives);
       }
@@ -485,7 +491,7 @@ class SerializeContext {
     if (!directives) return;
     for (const [directive, args] of directives) {
       this.writer.text(`\n@${directive}`);
-      this.acceptArgs(args);
+      this.acceptArgs(args, undefined, undefined, `directive '@${directive}'`);
     }
   }
 
@@ -493,6 +499,7 @@ class SerializeContext {
     args?: object,
     argGraphQLTypeMap?: ReadonlyMap<string, string>,
     enumInputMetadata?: EnumInputMetadata,
+    argContext = "argument",
   ) {
     if (!args) return;
     const t = this.writer.text.bind(this.writer);
@@ -516,18 +523,18 @@ class SerializeContext {
         () => {
           for (const argName in args) {
             this.writer.separator();
-            const arg = (args as any)[argName];
+            const arg = (args as Record<string, unknown>)[argName];
 
             if (argGraphQLTypeMap) {
               const typeName = argGraphQLTypeMap.get(argName);
               if (typeName !== undefined) {
-                if (arg?.[__marker]) {
+                if ((arg as Record<symbol, unknown>)?.[__marker]) {
                   const ref = arg as ParameterRef<string>;
                   this.registerVariableType(
                     ref,
                     typeName,
                     false,
-                    "field argument",
+                    `${argContext}.${argName}`,
                   );
                   t(`${argName}: $${ref.name}`);
                 } else {
@@ -542,18 +549,18 @@ class SerializeContext {
                 throw new Error(`Unknown argument '${argName}'`);
               }
             } else {
-              if (arg?.[__marker]) {
+              if ((arg as Record<symbol, unknown>)?.[__marker]) {
                 const ref = arg as ParameterRef<string>;
-                if (!ref.graphqlTypeName) {
+                if (!ref.explicitType) {
                   throw new Error(
-                    `Directive argument '${ref.name}' requires graphqlTypeName`,
+                    `Cannot infer the type of directive argument '${ref.name}'; an explicit type annotation is required.`,
                   );
                 }
                 this.registerVariableType(
                   ref,
-                  ref.graphqlTypeName,
+                  ref.explicitType,
                   false,
-                  "directive argument",
+                  `${argContext}.${argName}`,
                 );
                 t(`${argName}: $${ref.name}`);
               } else {
@@ -568,9 +575,9 @@ class SerializeContext {
   }
 
   private acceptLiteral(
-    value: any,
+    value: unknown,
     metaType: EnumInputMetaType | undefined,
-    graphqlTypeName: string | undefined,
+    explicitType: string | undefined,
   ) {
     const t = this.writer.text.bind(this.writer);
 
@@ -590,14 +597,14 @@ class SerializeContext {
       t(value ? "true" : "false");
       return;
     }
-    if (value?.[__marker]) {
+    if ((value as Record<symbol, unknown>)?.[__marker]) {
       const ref = value as ParameterRef<string>;
-      if (!graphqlTypeName && !ref.graphqlTypeName) {
+      if (!explicitType && !ref.explicitType) {
         throw new Error(
-          `Argument '${ref.name}' nested type cannot be inferred; provide graphqlTypeName`,
+          `Cannot infer the nested type of argument '${ref.name}'; an explicit type annotation is required.`,
         );
       }
-      this.registerVariableType(ref, graphqlTypeName, true, "nested argument");
+      this.registerVariableType(ref, explicitType, true, "nested argument");
       t(`$${ref.name}`);
       return;
     }
@@ -608,7 +615,7 @@ class SerializeContext {
 
     if (Array.isArray(value) || value instanceof Set) {
       const elementGraphQLTypeName =
-        SerializeContext.elementTypeName(graphqlTypeName);
+        SerializeContext.elementTypeName(explicitType);
       this.writer.scope({ type: "array" }, () => {
         for (const e of value) {
           this.writer.separator(", ");
@@ -635,7 +642,7 @@ class SerializeContext {
           this.writer.text(k);
           t(": ");
           this.acceptLiteral(
-            value[k],
+            (value as Record<string, unknown>)[k],
             metaType?.fields?.get(k),
             metaType?.fieldGraphQLTypeMap?.get(k),
           );
@@ -651,25 +658,24 @@ class SerializeContext {
     context = "argument",
   ) {
     const typeName =
-      expectedTypeName ??
-      (allowImplicitFromRef ? ref.graphqlTypeName : undefined);
+      expectedTypeName ?? (allowImplicitFromRef ? ref.explicitType : undefined);
     if (!typeName) {
       throw new Error(
-        `Directive argument '${ref.name}' requires graphqlTypeName`,
+        `Cannot infer the type of directive argument '${ref.name}'; an explicit type annotation is required.`,
       );
     }
-    if (ref.graphqlTypeName && ref.graphqlTypeName !== typeName) {
+    if (ref.explicitType && ref.explicitType !== typeName) {
       throw new Error(
-        `Argument '${ref.name}' type conflict: '${typeName}' vs ParameterRef '${ref.graphqlTypeName}' (${context})`,
+        `Variable '$${ref.name}' has conflicting GraphQL types at ${context}: inferred '${typeName}', but ParameterRef declares '${ref.explicitType}'`,
       );
     }
     const existing = this.variableTypeMap.get(ref.name);
-    if (existing && existing !== typeName) {
+    if (existing && existing.typeName !== typeName) {
       throw new Error(
-        `Argument '${ref.name}' type conflict: '${existing}' vs '${typeName}' (${context})`,
+        `Variable '$${ref.name}' has conflicting GraphQL types: first '${existing.typeName}' at ${existing.source}, then '${typeName}' at ${context}`,
       );
     }
-    this.variableTypeMap.set(ref.name, typeName);
+    this.variableTypeMap.set(ref.name, { typeName, source: context });
   }
 
   private static enumMetaType(

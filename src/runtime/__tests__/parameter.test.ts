@@ -5,11 +5,11 @@ describe("parameter ref", () => {
   it("creates refs with optional graphql type", () => {
     const a = ParameterRef.of("id");
     expect(a.name).toBe("id");
-    expect(a.graphqlTypeName).toBeUndefined();
+    expect(a.explicitType).toBeUndefined();
 
     const b = ParameterRef.of("cond", "Boolean!");
     expect(b.name).toBe("cond");
-    expect(b.graphqlTypeName).toBe("Boolean!");
+    expect(b.explicitType).toBe("Boolean!");
   });
 
   it("rejects names prefixed with $", () => {
@@ -18,4 +18,3 @@ describe("parameter ref", () => {
     );
   });
 });
-

@@ -1,8 +1,8 @@
 /**
- * @author ChenTao
+ * Runtime marker for `ParameterRef`.
  *
- * 1. If object is used by field arguments, don't specify the graphqlTypeName
- * 2. If object is used by directive arguments, graphqlTypeName is required
+ * We use a unique symbol instead of string keys to avoid accidental collision
+ * with user objects passed as argument literals.
  */
 export const __marker: unique symbol = Symbol("__parameter_ref_marker");
 
@@ -10,19 +10,49 @@ export class ParameterRef<TName extends string> {
   readonly [__marker] = true;
 
   private constructor(
+    /** GraphQL variable name without `$` prefix. */
     readonly name: TName,
-    readonly graphqlTypeName?: string,
+    /**
+     * Optional GraphQL type annotation (e.g. `Boolean!`, `[String!]`).
+     *
+     * - Field argument position: usually omitted, type can be inferred from
+     *   schema `argGraphQLTypeMap`.
+     * - Directive/nested position: usually required to register variable type.
+     */
+    readonly explicitType?: string,
   ) {
     if (name.startsWith("$")) {
       throw new Error("parameter name cannot start with '$'");
     }
   }
 
+  /**
+   * Represents a GraphQL variable reference used in DSL argument objects.
+   *
+   * Example:
+   * - `id: ParameterRef.of("postId")` -> `id: $postId`
+   *
+   * Main use cases:
+   * 1. Rename/bind a field argument to a different variable name.
+   * 2. Explicitly annotate variable type when runtime cannot infer it from a
+   *    field argument position (for example directive args or nested literals).
+   *
+   * When `explicitType` is NOT needed:
+   * - Field arg slot with schema type:
+   *   `q.user({ id: ParameterRef.of("userId") }, (u) => u.id)`
+   *   `id` type is inferred from schema (`ID!`).
+   *
+   * When `explicitType` IS needed:
+   * - Directive arg slot:
+   *   `node.$directive("include", { if: ParameterRef.of("withEmail", "Boolean!") })`
+   * - Nested input slot without direct arg type context:
+   *   `q.search({ filter: { keyword: ParameterRef.of("kw", "String!") } }, ...)`
+   */
   static of<TName extends string>(
     name: TName,
-    graphqlTypeName?: string,
+    explicitType?: string,
   ): ParameterRef<TName> {
-    return new ParameterRef<TName>(name, graphqlTypeName);
+    return new ParameterRef<TName>(name, explicitType);
   }
 }
 

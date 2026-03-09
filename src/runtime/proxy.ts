@@ -65,20 +65,24 @@ const createChildSelectionProxy = (
   );
 };
 
-const buildRequiredArgs = (
-  argTypeMap: ReadonlyMap<string, string>,
+const resolveAutoPropagatedArgs = (
+  declaredArgTypeMap: ReadonlyMap<string, string> | undefined,
+  providedArgs: Record<string, unknown> | undefined,
 ): { [key: string]: unknown } | undefined => {
-  if (!argTypeMap.size) return undefined;
-  const requiredArgNames = Array.from(argTypeMap.entries())
-    .filter(([, type]) => type.endsWith("!"))
-    .map(([name]) => name);
-  if (!requiredArgNames.length) return undefined;
-
-  const args: { [key: string]: unknown } = {};
-  for (const name of requiredArgNames) {
-    args[name] = ParameterRef.of(name);
+  // Default variable propagation: if a field declares args, bind each arg to a
+  // same-name variable by default (e.g. `id: $id`).
+  if (!declaredArgTypeMap?.size) {
+    return providedArgs;
   }
-  return args;
+
+  const autoArgs: Record<string, unknown> = {};
+  for (const argName of declaredArgTypeMap.keys()) {
+    autoArgs[argName] = ParameterRef.of(argName);
+  }
+  if (!providedArgs) {
+    return autoArgs;
+  }
+  return { ...autoArgs, ...providedArgs };
 };
 
 const resolveAssociationTarget = (
@@ -199,7 +203,8 @@ const proxyHandler = (
         else if (schemaType.fields.has(p)) {
           const field = schemaType.fields.get(p)!;
 
-          // Association fields → callback pattern
+          // Association fields use callback syntax (`field(args?, childBuilder)`),
+          // so this branch cannot reuse `methodHandler`.
           if (field.isAssociation || field.targetTypeName !== undefined) {
             return (...argArray: unknown[]) => {
               const targetSchemaType = resolveAssociationTarget(
@@ -222,12 +227,15 @@ const proxyHandler = (
                 throw new Error(`Field "${p}" requires a child selection`);
               }
 
-              if (!args) {
-                args = buildRequiredArgs(field.argGraphQLTypeMap);
-              }
+              // Entry #1 for default arg handling:
+              // association fields called without explicit args.
+              const resolvedArgs = resolveAutoPropagatedArgs(
+                field.argGraphQLTypeMap,
+                args,
+              );
 
               return new Proxy(
-                target.addField(p, args, childSelection),
+                target.addField(p, resolvedArgs, childSelection),
                 handler,
               );
             };
@@ -421,14 +429,15 @@ const methodHandler = (
       let { args, child, optionsValue } = parseMethodArgs(argArray);
 
       // Auto-parameterize unset args
-      if (!args) {
-        const argMap =
-          targetSelection.schemaType.ownFields.get(field)?.argGraphQLTypeMap;
-        args = argMap ? buildRequiredArgs(argMap) : undefined;
-      }
+
+      // Entry #2 for default arg handling:
+      // method-style fields called without explicit args.
+      const declaredArgTypeMap =
+        targetSelection.schemaType.fields.get(field)?.argGraphQLTypeMap;
+      const resolvedArgs = resolveAutoPropagatedArgs(declaredArgTypeMap, args);
 
       return new Proxy(
-        targetSelection.addField(field, args, child, optionsValue),
+        targetSelection.addField(field, resolvedArgs, child, optionsValue),
         handler,
       );
     },

@@ -33,10 +33,12 @@ describe("selection serialization and guards", () => {
 
   it("auto-renames conflicting named fragments", () => {
     const queryType = createSchemaType("SelectionQueryB", "OBJECT", [], ["id"]);
-    const nodeType = createSchemaType("SelectionNodeB", "OBJECT", [], [
-      "id",
-      "name",
-    ]);
+    const nodeType = createSchemaType(
+      "SelectionNodeB",
+      "OBJECT",
+      [],
+      ["id", "name"],
+    );
     const root = createRoot(queryType);
     const s1 = createRoot(nodeType).addField("id");
     const s2 = createRoot(nodeType).addField("name");
@@ -53,12 +55,18 @@ describe("selection serialization and guards", () => {
   });
 
   it("reuses runtime fragment names and increments suffix when multiple conflicts exist", () => {
-    const queryType = createSchemaType("SelectionQueryB2", "OBJECT", [], ["id"]);
-    const nodeType = createSchemaType("SelectionNodeB2", "OBJECT", [], [
-      "id",
-      "name",
-      "email",
-    ]);
+    const queryType = createSchemaType(
+      "SelectionQueryB2",
+      "OBJECT",
+      [],
+      ["id"],
+    );
+    const nodeType = createSchemaType(
+      "SelectionNodeB2",
+      "OBJECT",
+      [],
+      ["id", "name", "email"],
+    );
     const root = createRoot(queryType);
     const s1 = createRoot(nodeType).addField("id");
     const s2 = createRoot(nodeType).addField("name");
@@ -80,8 +88,15 @@ describe("selection serialization and guards", () => {
   });
 
   it("flattens inline embeddable selections in current scope", () => {
-    const queryType = createSchemaType("SelectionInlineSpreadQuery", "OBJECT", [], ["id"]);
-    const root = createRoot(queryType).addEmbeddable(createRoot(queryType).addField("id"));
+    const queryType = createSchemaType(
+      "SelectionInlineSpreadQuery",
+      "OBJECT",
+      [],
+      ["id"],
+    );
+    const root = createRoot(queryType).addEmbeddable(
+      createRoot(queryType).addField("id"),
+    );
 
     const text = root.toString();
     expect(text).toContain("id");
@@ -89,26 +104,43 @@ describe("selection serialization and guards", () => {
   });
 
   it("writes named fragment body into fragment text", () => {
-    const queryType = createSchemaType("SelectionNamedFragmentQuery", "OBJECT", [], ["id"]);
-    const nodeType = createSchemaType("SelectionNamedFragmentNode", "OBJECT", [], ["name"]);
+    const queryType = createSchemaType(
+      "SelectionNamedFragmentQuery",
+      "OBJECT",
+      [],
+      ["id"],
+    );
+    const nodeType = createSchemaType(
+      "SelectionNamedFragmentNode",
+      "OBJECT",
+      [],
+      ["name"],
+    );
     const root = createRoot(queryType).addEmbeddable(
       createRoot(nodeType).addField("name"),
       "nodeFields",
     );
 
     const fragmentText = root.toFragmentString();
-    expect(fragmentText).toContain("fragment nodeFields on SelectionNamedFragmentNode");
+    expect(fragmentText).toContain(
+      "fragment nodeFields on SelectionNamedFragmentNode",
+    );
     expect(fragmentText).toContain("name");
   });
 
   it("warns and skips unknown field args", () => {
-    const queryType = createSchemaType("SelectionQueryC", "OBJECT", [], [
-      {
-        name: "search",
-        category: "SCALAR",
-        argGraphQLTypeMap: { known: "String" },
-      },
-    ]);
+    const queryType = createSchemaType(
+      "SelectionQueryC",
+      "OBJECT",
+      [],
+      [
+        {
+          name: "search",
+          category: "SCALAR",
+          argGraphQLTypeMap: { known: "String" },
+        },
+      ],
+    );
     const root = createRoot(queryType).addField("search", { unexpected: "x" });
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const text = root.toString();
@@ -120,13 +152,18 @@ describe("selection serialization and guards", () => {
   });
 
   it("throws unknown argument when known and unknown args are mixed", () => {
-    const queryType = createSchemaType("SelectionQueryUnknownMixedArgs", "OBJECT", [], [
-      {
-        name: "search",
-        category: "SCALAR",
-        argGraphQLTypeMap: { known: "String!" },
-      },
-    ]);
+    const queryType = createSchemaType(
+      "SelectionQueryUnknownMixedArgs",
+      "OBJECT",
+      [],
+      [
+        {
+          name: "search",
+          category: "SCALAR",
+          argGraphQLTypeMap: { known: "String!" },
+        },
+      ],
+    );
     const root = createRoot(queryType).addField("search", {
       known: "ok",
       unknown: "x",
@@ -136,37 +173,70 @@ describe("selection serialization and guards", () => {
   });
 
   it("throws on invalid argument variable typing conflicts", () => {
-    const queryType = createSchemaType("SelectionQueryD", "OBJECT", [], [
-      {
-        name: "byId",
-        category: "SCALAR",
-        argGraphQLTypeMap: { id: "ID!" },
-      },
-      {
-        name: "a",
-        category: "SCALAR",
-        argGraphQLTypeMap: { value: "Int!" },
-      },
-      {
-        name: "b",
-        category: "SCALAR",
-        argGraphQLTypeMap: { value: "String!" },
-      },
-    ]);
+    const queryType = createSchemaType(
+      "SelectionQueryD",
+      "OBJECT",
+      [],
+      [
+        {
+          name: "byId",
+          category: "SCALAR",
+          argGraphQLTypeMap: { id: "ID!" },
+        },
+        {
+          name: "a",
+          category: "SCALAR",
+          argGraphQLTypeMap: { value: "Int!" },
+        },
+        {
+          name: "b",
+          category: "SCALAR",
+          argGraphQLTypeMap: { value: "String!" },
+        },
+      ],
+    );
 
     const mismatchRef = createRoot(queryType).addField("byId", {
       id: ParameterRef.of("id", "String!"),
     });
     expect(() => mismatchRef.toString()).toThrow(
-      "Argument 'id' type conflict: 'ID!' vs ParameterRef 'String!'",
+      "Variable '$id' has conflicting GraphQL types at field 'SelectionQueryD.byId'.id: inferred 'ID!', but ParameterRef declares 'String!'",
     );
 
     const conflictVar = createRoot(queryType)
       .addField("a", { value: ParameterRef.of("v") })
       .addField("b", { value: ParameterRef.of("v") });
     expect(() => conflictVar.toString()).toThrow(
-      "Argument 'v' type conflict: 'Int!' vs 'String!'",
+      "Variable '$v' has conflicting GraphQL types: first 'Int!' at field 'SelectionQueryD.a'.value, then 'String!' at field 'SelectionQueryD.b'.value",
     );
+  });
+
+  it("allows reusing same variable name when graphql types are identical", () => {
+    const queryType = createSchemaType(
+      "SelectionQueryD2",
+      "OBJECT",
+      [],
+      [
+        {
+          name: "left",
+          category: "SCALAR",
+          argGraphQLTypeMap: { id: "ID!" },
+        },
+        {
+          name: "right",
+          category: "SCALAR",
+          argGraphQLTypeMap: { id: "ID!" },
+        },
+      ],
+    );
+
+    const selection = createRoot(queryType)
+      .addField("left", { id: ParameterRef.of("id") })
+      .addField("right", { id: ParameterRef.of("id") });
+
+    expect(() => selection.toString()).not.toThrow();
+    expect(selection.variableTypeMap.size).toBe(1);
+    expect(selection.variableTypeMap.get("id")?.typeName).toBe("ID!");
   });
 
   it("throws on invalid directive parameter ref and supports enum/string literals", () => {
@@ -174,20 +244,25 @@ describe("selection serialization and guards", () => {
       .add("Status")
       .add("Filter", [{ name: "status", typeName: "Status" }])
       .build();
-    const queryType = createSchemaType("SelectionQueryE", "OBJECT", [], [
-      {
-        name: "search",
-        category: "SCALAR",
-        argGraphQLTypeMap: { filter: "Filter", expr: "String" },
-      },
-    ]);
+    const queryType = createSchemaType(
+      "SelectionQueryE",
+      "OBJECT",
+      [],
+      [
+        {
+          name: "search",
+          category: "SCALAR",
+          argGraphQLTypeMap: { filter: "Filter", expr: "String" },
+        },
+      ],
+    );
     const root = new SelectionImpl([queryType, enumMeta, undefined], false, "");
 
     const directiveRef = root
       .addField("search", { filter: { status: "ACTIVE" } })
       .addDirective("include", { if: ParameterRef.of("cond") });
     expect(() => directiveRef.toString()).toThrow(
-      "Directive argument 'cond' requires graphqlTypeName",
+      "Cannot infer the type of directive argument 'cond'; an explicit type annotation is required.",
     );
 
     const literalSelection = root.addField("search", {
@@ -200,24 +275,34 @@ describe("selection serialization and guards", () => {
   });
 
   it("supports directive parameter refs with explicit graphql types", () => {
-    const queryType = createSchemaType("SelectionQueryDirRef", "OBJECT", [], ["id"]);
+    const queryType = createSchemaType(
+      "SelectionQueryDirRef",
+      "OBJECT",
+      [],
+      ["id"],
+    );
     const root = createRoot(queryType)
       .addField("id")
       .addDirective("include", { if: ParameterRef.of("cond", "Boolean!") });
 
     const text = root.toString();
     expect(text).toContain("if: $cond");
-    expect(root.variableTypeMap.get("cond")).toBe("Boolean!");
+    expect(root.variableTypeMap.get("cond")?.typeName).toBe("Boolean!");
   });
 
   it("throws for directive parameter refs without known graphql type", () => {
-    const queryType = createSchemaType("SelectionQueryDirUnknownType", "OBJECT", [], ["id"]);
+    const queryType = createSchemaType(
+      "SelectionQueryDirUnknownType",
+      "OBJECT",
+      [],
+      ["id"],
+    );
     const root = createRoot(queryType)
       .addField("id")
       .addDirective("custom", { v: ParameterRef.of("v") });
 
     expect(() => root.toString()).toThrow(
-      "Directive argument 'v' requires graphqlTypeName",
+      "Cannot infer the type of directive argument 'v'; an explicit type annotation is required.",
     );
   });
 
@@ -233,64 +318,79 @@ describe("selection serialization and guards", () => {
 
     const text = root.toString();
     expect(text).toContain("@meta");
-    expect(text).toContain("payload: {k: \"v\"}");
-    expect(text).toContain("flags: [\"A\", \"B\"]");
-    expect(text).toContain("quoted: \"raw\"");
+    expect(text).toContain('payload: {k: "v"}');
+    expect(text).toContain('flags: ["A", "B"]');
+    expect(text).toContain('quoted: "raw"');
   });
 
   it("infers nested parameter refs inside list arguments", () => {
-    const queryType = createSchemaType("SelectionQueryI", "OBJECT", [], [
-      {
-        name: "batch",
-        category: "SCALAR",
-        argGraphQLTypeMap: { ids: "[ID!]!" },
-      },
-    ]);
+    const queryType = createSchemaType(
+      "SelectionQueryI",
+      "OBJECT",
+      [],
+      [
+        {
+          name: "batch",
+          category: "SCALAR",
+          argGraphQLTypeMap: { ids: "[ID!]!" },
+        },
+      ],
+    );
     const root = createRoot(queryType).addField("batch", {
       ids: [ParameterRef.of("id1"), ParameterRef.of("id2", "ID!")],
     });
 
     const text = root.toString();
     expect(text).toContain("ids: [$id1, $id2]");
-    expect(root.variableTypeMap.get("id1")).toBe("ID!");
-    expect(root.variableTypeMap.get("id2")).toBe("ID!");
+    expect(root.variableTypeMap.get("id1")?.typeName).toBe("ID!");
+    expect(root.variableTypeMap.get("id2")?.typeName).toBe("ID!");
   });
 
   it("throws when nested parameter ref type cannot be inferred", () => {
-    const queryType = createSchemaType("SelectionQueryInferErr", "OBJECT", [], ["id"]);
+    const queryType = createSchemaType(
+      "SelectionQueryInferErr",
+      "OBJECT",
+      [],
+      ["id"],
+    );
     const root = createRoot(queryType)
       .addField("id")
-      .addDirective("meta", { payload: { value: ParameterRef.of("unknownNestedType") } });
+      .addDirective("meta", {
+        payload: { value: ParameterRef.of("unknownNestedType") },
+      });
 
     expect(() => root.toString()).toThrow(
-      "Argument 'unknownNestedType' nested type cannot be inferred; provide graphqlTypeName",
+      "Cannot infer the nested type of argument 'unknownNestedType'; an explicit type annotation is required.",
     );
   });
 
   it("handles array args when declared graphql type is not a list", () => {
-    const queryType = createSchemaType("SelectionQueryArrayScalar", "OBJECT", [], [
-      {
-        name: "batch",
-        category: "SCALAR",
-        argGraphQLTypeMap: { ids: "ID" },
-      },
-    ]);
+    const queryType = createSchemaType(
+      "SelectionQueryArrayScalar",
+      "OBJECT",
+      [],
+      [
+        {
+          name: "batch",
+          category: "SCALAR",
+          argGraphQLTypeMap: { ids: "ID" },
+        },
+      ],
+    );
     const root = createRoot(queryType).addField("batch", {
       ids: [ParameterRef.of("idSingle", "ID")],
     });
 
     const text = root.toString();
     expect(text).toContain("ids: [$idSingle]");
-    expect(root.variableTypeMap.get("idSingle")).toBe("ID");
+    expect(root.variableTypeMap.get("idSingle")?.typeName).toBe("ID");
   });
 
   it("renders array directive args using multi-line argument mode", () => {
     const queryType = createSchemaType("SelectionQueryG", "OBJECT", [], ["id"]);
-    const root = createRoot(queryType).addField("id").addDirective("arr", [
-      1,
-      2,
-      3,
-    ] as any);
+    const root = createRoot(queryType)
+      .addField("id")
+      .addDirective("arr", [1, 2, 3] as any);
 
     const text = root.toString();
     expect(text).toContain("@arr");
@@ -300,13 +400,18 @@ describe("selection serialization and guards", () => {
   });
 
   it("serializes null literals in args and directives", () => {
-    const queryType = createSchemaType("SelectionQueryNullLiteral", "OBJECT", [], [
-      {
-        name: "search",
-        category: "SCALAR",
-        argGraphQLTypeMap: { filter: "String" },
-      },
-    ]);
+    const queryType = createSchemaType(
+      "SelectionQueryNullLiteral",
+      "OBJECT",
+      [],
+      [
+        {
+          name: "search",
+          category: "SCALAR",
+          argGraphQLTypeMap: { filter: "String" },
+        },
+      ],
+    );
     const root = createRoot(queryType)
       .addField("search", { filter: null })
       .addDirective("meta", { payload: null });
@@ -329,29 +434,56 @@ describe("selection serialization and guards", () => {
   });
 
   it("returns undefined for missing field lookups and supports toJSON", () => {
-    const queryType = createSchemaType("SelectionQueryLookup", "OBJECT", [], ["id"]);
+    const queryType = createSchemaType(
+      "SelectionQueryLookup",
+      "OBJECT",
+      [],
+      ["id"],
+    );
     const root = createRoot(queryType).addField("id");
 
     expect(root.findField("missing")).toBeUndefined();
     expect(root.findFieldByName("missing")).toBeUndefined();
 
     const json = root.toJSON();
-    expect(json).toContain("\"text\"");
-    expect(json).toContain("\"variableTypeMap\"");
+    expect(json).toContain('"text"');
+    expect(json).toContain('"variableTypeMap"');
   });
 
   it("findField can resolve nested fields through embeddable selections", () => {
-    const queryType = createSchemaType("SelectionQueryFindNested", "OBJECT", [], ["id"]);
-    const nodeType = createSchemaType("SelectionNodeFindNested", "OBJECT", [], ["name"]);
-    const root = createRoot(queryType).addEmbeddable(createRoot(nodeType).addField("name"));
+    const queryType = createSchemaType(
+      "SelectionQueryFindNested",
+      "OBJECT",
+      [],
+      ["id"],
+    );
+    const nodeType = createSchemaType(
+      "SelectionNodeFindNested",
+      "OBJECT",
+      [],
+      ["name"],
+    );
+    const root = createRoot(queryType).addEmbeddable(
+      createRoot(nodeType).addField("name"),
+    );
 
     const nested = root.findField("name");
     expect(nested?.name).toBe("name");
   });
 
   it("keeps inline spread when child selection comes from a union root chain", () => {
-    const queryType = createSchemaType("SelectionUnionHost", "OBJECT", [], ["id"]);
-    const unionType = createSchemaType("SelectionUnionNode", "OBJECT", [], ["name"]);
+    const queryType = createSchemaType(
+      "SelectionUnionHost",
+      "OBJECT",
+      [],
+      ["id"],
+    );
+    const unionType = createSchemaType(
+      "SelectionUnionNode",
+      "OBJECT",
+      [],
+      ["name"],
+    );
     const unionRoot = new SelectionImpl(
       [unionType, new EnumInputMetadataBuilder().build(), ["User", "Page"]],
       false,

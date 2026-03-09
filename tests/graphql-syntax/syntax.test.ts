@@ -118,6 +118,25 @@ describe("GraphQL syntax generation (from codegen output)", () => {
     );
   });
 
+  it("propagates all field args as variables when args are omitted", async () => {
+    const mod = (await import(pathToFileURL(QUERY_SELECTION_FILE).href)) as {
+      query$: any;
+    };
+
+    const selection = mod.query$((q: any) => q.post((p: any) => p.id.title));
+
+    expect(queryDoc(selection, "($id: ID!)")).toBe(
+      pretty(`
+        query Q($id: ID!) {
+          post(id: $id) {
+            id
+            title
+          }
+        }
+      `),
+    );
+  });
+
   it("builds valid alias/directive/variable output", async () => {
     const mod = (await import(pathToFileURL(QUERY_SELECTION_FILE).href)) as {
       query$: any;
@@ -135,6 +154,54 @@ describe("GraphQL syntax generation (from codegen output)", () => {
         query Q($postId: ID!) {
           postTitle: post(id: $postId) @include(if: true) {
             title
+          }
+        }
+      `),
+    );
+  });
+
+  it("treats explicit args as partial overrides and still auto-propagates omitted args", async () => {
+    const mod = (await import(pathToFileURL(QUERY_SELECTION_FILE).href)) as {
+      query$: any;
+    };
+
+    const selection = mod.query$((q: any) =>
+      q.searchUsers(
+        { filter: ParameterRef.of("f", "UserFilterInput!") },
+        (u: any) => u.id.name,
+      ),
+    );
+
+    expect(queryDoc(selection, "($f: UserFilterInput!, $tags: [String!], $role: Role)")).toBe(
+      pretty(`
+        query Q($f: UserFilterInput!, $tags: [String!], $role: Role) {
+          searchUsers(filter: $f, tags: $tags, role: $role) {
+            id
+            name
+          }
+        }
+      `),
+    );
+  });
+
+  it("builds query variable declarations and uses $variables in arguments", async () => {
+    const mod = (await import(pathToFileURL(QUERY_SELECTION_FILE).href)) as {
+      query$: any;
+    };
+
+    const selection = mod.query$((q: any) =>
+      q.post(
+        { id: ParameterRef.of("postId") },
+        (p: any) => p.id.title.$directive("mask", { reason: ParameterRef.of("why", "String") }),
+      ),
+    );
+
+    expect(queryDoc(selection, "($postId: ID!, $why: String)")).toBe(
+      pretty(`
+        query Q($postId: ID!, $why: String) {
+          post(id: $postId) {
+            id
+            title @mask(reason: $why)
           }
         }
       `),
