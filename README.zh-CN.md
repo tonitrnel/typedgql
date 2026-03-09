@@ -24,6 +24,13 @@ pnpm add -D graphql typescript
 
 - [typedgql 进阶用法（中文）](./docs/advanced-usage.zh-CN.md)
 - [typedgql 运行时接入指南（中文）](./docs/runtime-integration.zh-CN.md)
+- [typedgql Quickstart（英文）](./docs/quickstart.md)
+- [typedgql API 地图（英文）](./docs/api-map.md)
+- [typedgql 参数语义（英文）](./docs/variables.md)
+- [typedgql Fragment 指南（英文）](./docs/fragments.md)
+- [typedgql 运行时接入（英文）](./docs/runtime-integration.md)
+- [typedgql 常见问题（英文）](./docs/troubleshooting.md)
+- [typedgql 生成文件说明（英文）](./docs/generated-files.md)
 
 ### 1. Vite 插件方式（推荐）
 
