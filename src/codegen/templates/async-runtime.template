@@ -23,15 +23,34 @@ export function setGraphQLSubscriber(subscriber: GraphQLSubscriber) {
 export type Simplify<T> = SimplifyDepth<T>;
 type Primitive = string | number | boolean | bigint | symbol | null | undefined;
 type Dec = [0,0,1,2,3,4,5,6,7,8,9];
+type IsEqual<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends
+  (<T>() => T extends B ? 1 : 2)
+    ? (<T>() => T extends B ? 1 : 2) extends
+      (<T>() => T extends A ? 1 : 2)
+      ? true
+      : false
+    : false;
+type Includes<TItems extends readonly unknown[], TItem> =
+  TItems extends readonly [infer Head, ...infer Tail]
+    ? IsEqual<Head, TItem> extends true
+      ? true
+      : Includes<Tail, TItem>
+    : false;
 type GraphQLRawResponse = {
   readonly data?: unknown;
   readonly errors?: unknown;
 };
-export type SimplifyDepth<T, D extends number = 5> =
+export type SimplifyDepth<
+  T,
+  D extends number = 5,
+  Seen extends readonly unknown[] = [],
+> =
   D extends 0 ? T :
   T extends Primitive | Function ? T :
-  T extends readonly (infer U)[] ? readonly SimplifyDepth<U, Dec[D]>[] :
-  T extends object ? { [K in keyof T]: SimplifyDepth<T[K], Dec[D]> } & {} :
+  Includes<Seen, T> extends true ? T :
+  T extends readonly (infer U)[] ? readonly SimplifyDepth<U, Dec[D], [...Seen, T]>[] :
+  T extends object ? { [K in keyof T]: SimplifyDepth<T[K], Dec[D], [...Seen, T]> } & {} :
   T;
 
 export async function execute<

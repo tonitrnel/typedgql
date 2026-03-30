@@ -3,8 +3,29 @@ import { fragment$ } from "./__gen__/index";
 import { query$ } from "./__gen__/selections/query-selection";
 import { mutation$ } from "./__gen__/selections/mutation-selection";
 import { subscription$ } from "./__gen__/selections/subscription-selection";
+import type { SimplifyDepth } from "./__gen__/client-runtime";
 import type { VariablesOf, ShapeOf } from "../../src/index";
 import { ParameterRef } from "../../src/index";
+
+type RecursiveNode = {
+  readonly id: string;
+  readonly parent?: RecursiveNode;
+  readonly children: readonly RecursiveNode[];
+};
+
+type SimplifiedRecursiveNode = SimplifyDepth<RecursiveNode, 9>;
+
+expectAssignable<{
+  readonly id: string;
+  readonly parent?: RecursiveNode;
+  readonly children: readonly RecursiveNode[];
+}>(null as unknown as SimplifiedRecursiveNode);
+expectType<RecursiveNode | undefined>(
+  null as unknown as SimplifiedRecursiveNode["parent"],
+);
+expectType<readonly RecursiveNode[]>(
+  null as unknown as SimplifiedRecursiveNode["children"],
+);
 
 const postSelection = query$((q) => q.post({ id: "p1" }, (p) => p.id.title));
 expectType<string>(postSelection.toString());

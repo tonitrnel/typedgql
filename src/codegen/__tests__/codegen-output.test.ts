@@ -312,6 +312,8 @@ describe("Codegen output (blog schema)", () => {
         expect(content).toContain("export async function execute");
         expect(content).toContain("export async function* subscribe");
         expect(content).toContain("TextBuilder");
+        expect(content).toContain("type Includes<TItems extends readonly unknown[], TItem>");
+        expect(content).toContain("Includes<Seen, T> extends true ? T");
     });
 
     // ── type-hierarchy.ts ──
