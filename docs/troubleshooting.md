@@ -38,6 +38,5 @@ If generated files are inside `node_modules`, Vite dependency cache may keep sta
 
 Fix options:
 
-- restart dev server
-- force re-optimize deps
-- ensure plugin strategy includes restart when schema hash changes
+- schema changes handled by the typedgql Vite plugin now restart the dev server automatically
+- if you generated code manually outside the plugin, restart dev server or force re-optimize deps

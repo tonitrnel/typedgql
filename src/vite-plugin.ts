@@ -12,18 +12,6 @@ import { Generator } from "./codegen/generator";
 import { loadLocalSchema, loadRemoteSchema } from "./codegen/schema-loader";
 import type { CodegenOptions } from "./codegen/options";
 
-export interface DevDependencyHmrOptions {
-  /**
-   * How to refresh dev server when watched dependency files change.
-   *
-   * - "reload": send full page reload
-   * - "restart": restart Vite dev server
-   *
-   * @default "reload"
-   */
-  strategy?: "reload" | "restart";
-}
-
 export interface TypedGqlPluginOptions extends Omit<
   CodegenOptions,
   "schemaLoader"
@@ -42,51 +30,36 @@ export interface TypedGqlPluginOptions extends Omit<
    * Only used when `schema` is a URL.
    */
   schemaHeaders?: Record<string, string>;
-  /**
-   * Optional dev-time watcher for dependency files in node_modules.
-   * Useful when developing typedgql as an installed package rather than workspace source.
-   */
-  devDependencyHmr?: boolean | DevDependencyHmrOptions;
 }
 
-function isRemote(schema: string): boolean {
+const isRemote = (schema: string): boolean => {
   return /^https?:\/\//.test(schema);
-}
+};
 
-function makeSchemaLoader(
+const makeSchemaLoader = (
   schema: string,
   headers?: Record<string, string>,
-): () => Promise<import("graphql").GraphQLSchema> {
+): (() => Promise<import("graphql").GraphQLSchema>) => {
   return isRemote(schema)
     ? () => loadRemoteSchema(schema, headers)
     : () => loadLocalSchema(schema);
-}
+};
 
-function resolveDevDependencyHmr(
-  option: boolean | DevDependencyHmrOptions | undefined,
-): { strategy: "reload" | "restart" } | undefined {
-  if (!option) return undefined;
-  if (option === true) {
-    return { strategy: "reload" };
-  }
-  return { strategy: option.strategy ?? "reload" };
-}
-
-function buildNegatedWatchPattern(packageName: string): string {
+const buildNegatedWatchPattern = (packageName: string): string => {
   return `!**/node_modules/${packageName}/**`;
-}
+};
 
 const DEV_DEP_HMR_PACKAGE_NAME = "@ptdgrp/typedgql";
 const DEV_DEP_HMR_WATCH_DIRS = ["dist"] as const;
 
-async function hashFile(path: string): Promise<string | undefined> {
+const hashFile = async (path: string): Promise<string | undefined> => {
   try {
     const content = await readFile(path);
     return createHash("sha256").update(content).digest("hex");
   } catch {
     return undefined;
   }
-}
+};
 
 /**
  * Vite plugin that runs typedgql codegen automatically.
@@ -110,9 +83,8 @@ async function hashFile(path: string): Promise<string | undefined> {
  * ```
  */
 export function typedgql(options: TypedGqlPluginOptions): Plugin {
-  const { schema, schemaHeaders, devDependencyHmr, ...generatorOptions } = options;
+  const { schema, schemaHeaders, ...generatorOptions } = options;
   const remote = isRemote(schema);
-  const depHmr = resolveDevDependencyHmr(devDependencyHmr);
 
   const codegenOptions: CodegenOptions = {
     ...generatorOptions,
@@ -146,10 +118,10 @@ export function typedgql(options: TypedGqlPluginOptions): Plugin {
     name: "vite-plugin-typedgql",
 
     config(config): UserConfig | void {
-      if (!depHmr) return;
-      const negatedPattern = buildNegatedWatchPattern(DEV_DEP_HMR_PACKAGE_NAME);
       const exclude = new Set(config.optimizeDeps?.exclude ?? []);
       exclude.add(DEV_DEP_HMR_PACKAGE_NAME);
+
+      const negatedPattern = buildNegatedWatchPattern(DEV_DEP_HMR_PACKAGE_NAME);
       const watchIgnored = config.server?.watch?.ignored;
       const mergedIgnored = Array.isArray(watchIgnored)
         ? [...watchIgnored, negatedPattern]
@@ -188,32 +160,26 @@ export function typedgql(options: TypedGqlPluginOptions): Plugin {
      * Not registered for remote schemas — those re-run on the next dev/build start.
      */
     configureServer(server) {
-      if (depHmr) {
-        const packageRoot = normalizePath(
-          resolve(server.config.root, "node_modules", DEV_DEP_HMR_PACKAGE_NAME),
-        );
-        const watchedDirs = DEV_DEP_HMR_WATCH_DIRS.map((dir) =>
-          normalizePath(resolve(packageRoot, dir)),
-        );
-        for (const dir of watchedDirs) {
-          server.watcher.add(dir);
-        }
-        server.watcher.on("change", async (file) => {
-          const changedPath = normalizePath(file);
-          if (!watchedDirs.some((dir) => changedPath.startsWith(dir))) return;
-          if (isDependencyRefreshRunning) return;
-          isDependencyRefreshRunning = true;
-          try {
-            if (depHmr.strategy === "restart") {
-              await server.restart();
-            } else {
-              server.ws.send({ type: "full-reload" });
-            }
-          } finally {
-            isDependencyRefreshRunning = false;
-          }
-        });
+      const packageRoot = normalizePath(
+        resolve(server.config.root, "node_modules", DEV_DEP_HMR_PACKAGE_NAME),
+      );
+      const watchedDirs = DEV_DEP_HMR_WATCH_DIRS.map((dir) =>
+        normalizePath(resolve(packageRoot, dir)),
+      );
+      for (const dir of watchedDirs) {
+        server.watcher.add(dir);
       }
+      server.watcher.on("change", async (file) => {
+        const changedPath = normalizePath(file);
+        if (!watchedDirs.some((dir) => changedPath.startsWith(dir))) return;
+        if (isDependencyRefreshRunning) return;
+        isDependencyRefreshRunning = true;
+        try {
+          await server.restart(true);
+        } finally {
+          isDependencyRefreshRunning = false;
+        }
+      });
 
       if (remote) return;
 
@@ -234,7 +200,8 @@ export function typedgql(options: TypedGqlPluginOptions): Plugin {
       });
       server.watcher.on("change", async (file) => {
         const changedPath = normalizePath(file);
-        if (changedPath !== schemaPath && changedPath !== realSchemaPath) return;
+        if (changedPath !== schemaPath && changedPath !== realSchemaPath)
+          return;
         await initSchemaHashPromise;
         const nextHash = await hashFile(schemaPath);
         if (nextHash && nextHash === lastSchemaHash) return;
@@ -242,7 +209,7 @@ export function typedgql(options: TypedGqlPluginOptions): Plugin {
         if (nextHash) {
           lastSchemaHash = nextHash;
         }
-        server.ws.send({ type: "full-reload" });
+        await server.restart(true);
       });
     },
   };
