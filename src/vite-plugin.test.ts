@@ -123,6 +123,12 @@ describe("typedgql vite plugin", () => {
     const server = { config: { root: "/project" }, watcher, ws, restart } as any;
 
     plugin.configureServer?.(server);
+    
+    // Wait for async initialization - watcher.add should be called twice
+    await vi.waitFor(() => {
+      expect(watcher.add).toHaveBeenCalledTimes(2);
+    });
+    
     const schemaPath = new URL("./schema.graphql", "file:///project/").pathname;
     expect(watcher.add).toHaveBeenCalledWith(schemaPath);
     expect(onChange).toBeDefined();
@@ -311,8 +317,11 @@ describe("typedgql vite plugin", () => {
 
     const p1 = plugin.buildStart?.call({});
     const p2 = plugin.buildStart?.call({});
-    await Promise.resolve();
-    expect(mocks.generatorCtor).toHaveBeenCalledTimes(1);
+    
+    // Wait for async initialization to complete
+    await vi.waitFor(() => {
+      expect(mocks.generatorCtor).toHaveBeenCalledTimes(1);
+    });
 
     release?.();
     await p1;

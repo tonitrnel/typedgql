@@ -11,6 +11,7 @@ import { normalizePath } from "vite";
 import { Generator } from "./codegen/generator";
 import { loadLocalSchema, loadRemoteSchema } from "./codegen/schema-loader";
 import type { CodegenOptions } from "./codegen/options";
+import { loadConfig, mergeConfig } from "./codegen/config-loader";
 
 export interface TypedGqlPluginOptions extends Omit<
   CodegenOptions,
@@ -23,13 +24,20 @@ export interface TypedGqlPluginOptions extends Omit<
    *
    * Local file → codegen runs on startup, then re-runs on every file change.
    * Remote URL → codegen runs on every `vite dev` / `vite build` invocation.
+   *
+   * If omitted, will attempt to load from .typedgqlrc.toml config file.
    */
-  schema: string;
+  schema?: string;
   /**
    * HTTP headers forwarded when fetching a remote schema.
    * Only used when `schema` is a URL.
    */
   schemaHeaders?: Record<string, string>;
+  /**
+   * Output directory for generated files.
+   * Alias for `targetDir` for better clarity.
+   */
+  outputDir?: string;
 }
 
 const isRemote = (schema: string): boolean => {
@@ -66,6 +74,7 @@ const hashFile = async (path: string): Promise<string | undefined> => {
  *
  * - **Local schema** — runs once on startup, then watches for file changes.
  * - **Remote schema** — runs on every `vite dev` / `vite build` invocation.
+ * - **Config file** — if no schema is provided, loads from .typedgqlrc.toml
  *
  * @example
  * ```ts
@@ -78,18 +87,18 @@ const hashFile = async (path: string): Promise<string | undefined> => {
  *     typedgql({ schema: "./schema.graphql" }),
  *     // or remote endpoint
  *     typedgql({ schema: "http://localhost:4000/graphql" }),
+ *     // or use .typedgqlrc.toml config file
+ *     typedgql(),
  *   ],
  * });
  * ```
  */
-export function typedgql(options: TypedGqlPluginOptions): Plugin {
-  const { schema, schemaHeaders, ...generatorOptions } = options;
-  const remote = isRemote(schema);
-
-  const codegenOptions: CodegenOptions = {
-    ...generatorOptions,
-    schemaLoader: makeSchemaLoader(schema, schemaHeaders),
-  };
+export function typedgql(options?: TypedGqlPluginOptions): Plugin {
+  let resolvedOptions: TypedGqlPluginOptions;
+  let schema: string | undefined;
+  let remote: boolean;
+  let codegenOptions: CodegenOptions;
+  let initialized = false;
 
   let isRunning = false;
   let isDependencyRefreshRunning = false;
@@ -97,6 +106,46 @@ export function typedgql(options: TypedGqlPluginOptions): Plugin {
   let initSchemaHashPromise: Promise<void> | undefined;
   let resolvedConfig: ResolvedConfig;
   let logger: Logger;
+
+  async function initializeOptions() {
+    if (initialized) return;
+    
+    // Load config file if it exists
+    const fileConfig = await loadConfig();
+
+    // Merge file config with programmatic options
+    resolvedOptions = mergeConfig(fileConfig, options ?? {});
+
+    // Normalize outputDir to targetDir
+    if (resolvedOptions.outputDir && !resolvedOptions.targetDir) {
+      resolvedOptions.targetDir = resolvedOptions.outputDir;
+    }
+
+    // Validate schema is provided
+    if (!resolvedOptions.schema) {
+      throw new Error(
+        "typedgql: 'schema' option is required. " +
+          "Provide it in plugin options or in .typedgqlrc.toml config file.",
+      );
+    }
+
+    schema = resolvedOptions.schema;
+    remote = isRemote(schema);
+
+    const {
+      schema: _,
+      schemaHeaders,
+      outputDir: __,
+      ...generatorOptions
+    } = resolvedOptions;
+
+    codegenOptions = {
+      ...generatorOptions,
+      schemaLoader: makeSchemaLoader(schema, schemaHeaders),
+    };
+    
+    initialized = true;
+  }
 
   async function runCodegen(trigger: string) {
     if (isRunning) return;
@@ -151,6 +200,7 @@ export function typedgql(options: TypedGqlPluginOptions): Plugin {
      * For local schemas this handles the initial run; the watcher handles subsequent ones.
      */
     async buildStart() {
+      await initializeOptions();
       const trigger = resolvedConfig?.command === "build" ? "build" : "start";
       await runCodegen(trigger);
     },
@@ -181,35 +231,40 @@ export function typedgql(options: TypedGqlPluginOptions): Plugin {
         }
       });
 
-      if (remote) return;
+      // Setup schema watcher after initialization
+      void initializeOptions().then(() => {
+        // Schema might not be initialized yet if using config file
+        // Wait for buildStart to initialize it
+        if (!schema || remote) return;
 
-      const root = server.config.root;
-      const schemaPath = normalizePath(resolve(root, schema));
-      let realSchemaPath = schemaPath;
-      void realpath(schemaPath)
-        .then((actualPath) => {
-          realSchemaPath = normalizePath(actualPath);
-        })
-        .catch(() => {
-          // Ignore when schema path is not resolvable yet.
+        const root = server.config.root;
+        const schemaPath = normalizePath(resolve(root, schema));
+        let realSchemaPath = schemaPath;
+        void realpath(schemaPath)
+          .then((actualPath) => {
+            realSchemaPath = normalizePath(actualPath);
+          })
+          .catch(() => {
+            // Ignore when schema path is not resolvable yet.
+          });
+
+        server.watcher.add(schemaPath);
+        initSchemaHashPromise = hashFile(schemaPath).then((hash) => {
+          lastSchemaHash = hash;
         });
-
-      server.watcher.add(schemaPath);
-      initSchemaHashPromise = hashFile(schemaPath).then((hash) => {
-        lastSchemaHash = hash;
-      });
-      server.watcher.on("change", async (file) => {
-        const changedPath = normalizePath(file);
-        if (changedPath !== schemaPath && changedPath !== realSchemaPath)
-          return;
-        await initSchemaHashPromise;
-        const nextHash = await hashFile(schemaPath);
-        if (nextHash && nextHash === lastSchemaHash) return;
-        await runCodegen("watch");
-        if (nextHash) {
-          lastSchemaHash = nextHash;
-        }
-        await server.restart(true);
+        server.watcher.on("change", async (file) => {
+          const changedPath = normalizePath(file);
+          if (changedPath !== schemaPath && changedPath !== realSchemaPath)
+            return;
+          await initSchemaHashPromise;
+          const nextHash = await hashFile(schemaPath);
+          if (nextHash && nextHash === lastSchemaHash) return;
+          await runCodegen("watch");
+          if (nextHash) {
+            lastSchemaHash = nextHash;
+          }
+          await server.restart(true);
+        });
       });
     },
   };

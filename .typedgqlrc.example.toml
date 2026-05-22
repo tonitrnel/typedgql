@@ -1,0 +1,89 @@
+# TypedGQL Configuration File
+# This file configures code generation options for @ptdgrp/typedgql
+
+# GraphQL schema source (required)
+# Can be a local file path or remote endpoint URL
+schema = "./schema.graphql"
+# schema = "http://localhost:4000/graphql"
+
+# Output directory for generated files (optional)
+# If omitted, defaults to node_modules/@ptdgrp/typedgql/__generated
+# IMPORTANT: Cannot be inside node_modules directory
+# When using a custom output directory, Prettier will be used for formatting if available
+outputDir = "./src/__generated"
+
+# Indentation string used in generated files (optional)
+# Default: "    " (4 spaces)
+indent = "  "
+
+# Whether generated object fields are writable (optional)
+# false => emit readonly object properties
+# true => emit mutable object properties
+# Default: false
+objectEditable = false
+
+# Whether generated array types are mutable (optional)
+# false => emit ReadonlyArray<T>
+# true => emit Array<T>
+# Default: false
+arrayEditable = false
+
+# Suffix used for generated selection interface names (optional)
+# Default: "Selection"
+selectionSuffix = "Selection"
+
+# GraphQL type names to exclude from selection generation (optional)
+excludedTypes = ["InternalType", "DebugInfo"]
+
+# Enum output strategy (optional)
+# false/undefined: default enum writer behavior
+# "string": generate string enum style
+# "number": generate numeric enum style
+# true: enable enum generation with default mode
+tsEnum = "string"
+
+# HTTP headers for remote schema fetching (optional)
+# Only used when schema is a URL
+[schemaHeaders]
+Authorization = "Bearer token123"
+"X-Custom-Header" = "value"
+
+# Scalar type mapping (optional)
+# Maps GraphQL scalar types to TypeScript types
+[scalarTypeMap]
+DateTime = "string"
+JSON = "JsonObject"
+UUID = "string"
+
+# TypeScript declarations for scalar types (optional)
+# Only type/interface declarations are allowed
+# These will be emitted into the generated scalar-types.ts namespace
+# Use multi-line string for complex type declarations
+scalarTypeDeclarations = """
+export interface JsonObject {
+  [key: string]: JsonValue;
+}
+
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonObject
+  | JsonValue[];
+
+export interface Point {
+  x: number;
+  y: number;
+}
+"""
+
+# Override ID field name per GraphQL type (optional)
+[idFieldMap]
+User = "userId"
+Post = "postId"
+
+# Exclude fields from default selection ($$) per type (optional)
+[defaultSelectionExcludeMap]
+User = ["password", "internalData"]
+Post = ["metadata"]

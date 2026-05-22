@@ -30,6 +30,7 @@ pnpm add -D graphql typescript
 
 For advanced usage (Subscription, directives, GraphQL mapping), see:
 
+- [Configuration Guide](./docs/configuration.md) - **NEW: Configuration file support**
 - [Advanced Usage](./docs/advanced-usage.md)
 - [Runtime Integration Guide](./docs/runtime-integration.md)
 - [Quickstart](./docs/quickstart.md)
@@ -39,6 +40,28 @@ For advanced usage (Subscription, directives, GraphQL mapping), see:
 - [Runtime Integration Guide](./docs/runtime-integration.md)
 - [Troubleshooting](./docs/troubleshooting.md)
 - [Generated Files Guide](./docs/generated-files.md)
+
+### 0. Configuration File (Optional)
+
+Create a `.typedgqlrc.toml` file in your project root:
+
+```toml
+# GraphQL schema source
+schema = "./schema.graphql"
+
+# Output directory for generated files
+outputDir = "./src/__generated"
+
+# Indentation (optional)
+indent = "  "
+
+# Scalar type mapping (optional)
+[scalarTypeMap]
+DateTime = "string"
+JSON = "JsonObject"
+```
+
+See [Configuration Guide](./docs/configuration.md) for all available options.
 
 ### 1. Vite Plugin (Recommended)
 
@@ -50,9 +73,12 @@ import { typedgql } from "@ptdgrp/typedgql/vite";
 
 export default defineConfig({
   plugins: [
+    // With inline options
     typedgql({ schema: "./schema.graphql" }),
     // or remote schema:
     // typedgql({ schema: "http://localhost:4000/graphql" }),
+    // or use .typedgqlrc.toml config file:
+    // typedgql(),
   ],
 });
 ```
@@ -62,16 +88,43 @@ Codegen runs automatically when Vite starts, and re-runs when the schema changes
 ### 2. Manual Generation in Node
 
 ```ts
-import { Generator, loadLocalSchema } from "@ptdgrp/typedgql/node";
+import { Generator, loadLocalSchema, loadConfig } from "@ptdgrp/typedgql/node";
 
+// Option 1: Use configuration file
+const config = await loadConfig();
+const generator = new Generator({
+  ...config,
+  schemaLoader: () => loadLocalSchema(config.schema),
+});
+
+// Option 2: Programmatic configuration
 const generator = new Generator({
   schemaLoader: () => loadLocalSchema("./schema.graphql"),
+  targetDir: "./src/__generated",
 });
 
 await generator.generate();
 ```
 
-### 3. Runtime Execution (Basic Example)
+### 3. CLI Tool
+
+If you have a `.typedgqlrc.toml` configuration file, you can use the CLI:
+
+```bash
+# Run code generation
+npx typedgql
+
+# Or add to package.json scripts
+{
+  "scripts": {
+    "codegen": "typedgql"
+  }
+}
+```
+
+The CLI will automatically read your `.typedgqlrc.toml` configuration and generate types accordingly.
+
+### 4. Runtime Execution (Basic Example)
 
 ```ts
 import { G, execute, setGraphQLExecutor } from "@ptdgrp/typedgql";

@@ -13,7 +13,7 @@ import {
 import type { CodegenOptions } from "./options";
 import { mkdir, readFile, rm, writeFile } from "fs/promises";
 import { createWriteStream, WriteStream } from "fs";
-import { join, resolve } from "path";
+import { join, resolve, normalize } from "path";
 import { SelectionWriter } from "./writers/selection";
 import { EnumWriter } from "./writers/enum";
 import { InputWriter } from "./writers/input";
@@ -25,6 +25,8 @@ import { isExcludedTypeName, targetTypeOf, toKebabCase } from "./utils";
 import ASYNC_CODE from "./templates/async-runtime.template?raw";
 import { SCALAR_TYPES_NAMESPACE } from "./imports";
 import { analyzeScalarTypeDeclarations } from "./scalar-type-declarations";
+import { formatWithPrettier, isPrettierAvailable } from "./prettier-formatter";
+import { BufferedStream, type WriteStreamLike } from "./buffered-stream";
 
 /** Default output directory: node_modules/@ptdgrp/typedgql/__generated */
 const DEFAULT_TARGET_DIR = resolve(
@@ -55,11 +57,67 @@ const RESERVED_FIELDS = new Set([
 ]);
 
 export class Generator {
+  private usePrettier = false;
+  private isCustomOutputDir = false;
+  private bufferedStreams: BufferedStream[] = [];
+
   constructor(protected options: CodegenOptions) {}
 
   /** Resolved output directory (uses default if not configured) */
   private get targetDir(): string {
     return this.options.targetDir ?? DEFAULT_TARGET_DIR;
+  }
+
+  /**
+   * Check if we should use prettier formatting.
+   * Only enabled when using custom outputDir (not in node_modules).
+   */
+  private async initializePrettier(): Promise<void> {
+    const targetDir = this.targetDir;
+    const normalizedPath = normalize(targetDir);
+    
+    // Check if output is in node_modules
+    this.isCustomOutputDir = !normalizedPath.includes("node_modules");
+    
+    // Only use prettier for custom output directories
+    if (this.isCustomOutputDir) {
+      this.usePrettier = await isPrettierAvailable();
+      if (this.usePrettier) {
+        console.log("[typedgql] Prettier detected, will format generated files");
+      }
+    }
+  }
+
+  /**
+   * Create a stream for writing generated code.
+   * Uses BufferedStream when prettier formatting is enabled.
+   */
+  private createCodeStream(path: string): WriteStreamLike | WriteStream {
+    if (this.usePrettier) {
+      const buffered = new BufferedStream(path);
+      this.bufferedStreams.push(buffered);
+      return buffered.toWriteStream();
+    }
+    return createWriteStream(path);
+  }
+
+  /**
+   * Flush all buffered streams with prettier formatting.
+   */
+  private async flushBufferedStreams(): Promise<void> {
+    if (this.bufferedStreams.length === 0) {
+      return;
+    }
+
+    console.log(`[typedgql] Formatting ${this.bufferedStreams.length} files with prettier...`);
+    
+    await Promise.all(
+      this.bufferedStreams.map((stream) =>
+        stream.flush(this.usePrettier ? formatWithPrettier : undefined)
+      )
+    );
+
+    this.bufferedStreams = [];
   }
 
   async generate() {
@@ -69,6 +127,9 @@ export class Generator {
 
     await rm(this.targetDir, { recursive: true, force: true });
     await mkdir(this.targetDir, { recursive: true });
+
+    // Initialize prettier detection
+    await this.initializePrettier();
 
     const typeHierarchy = new TypeHierarchyGraph(schema);
     const selectionTypes: Array<
@@ -201,6 +262,9 @@ export class Generator {
 
     await Promise.all(promises);
 
+    // Flush all buffered streams with prettier formatting
+    await this.flushBufferedStreams();
+
     // Post-generation: create package.json and index.ts in node_modules/@ptdgrp/typedgql/
     // only when using the default Prisma-style output path
     if (this.options.targetDir === undefined) {
@@ -232,9 +296,9 @@ export class Generator {
 
     const promises = ctx.selectionTypes.map(async (type) => {
       const selectionTypeName = `${type.name}${suffix}`;
-      const stream = createStream(
+      const stream = this.createCodeStream(
         join(dir, `${toKebabCase(selectionTypeName)}.ts`),
-      );
+      ) as WriteStream;
       const writer = this.createSelectionWriter(
         type,
         ctx,
@@ -252,7 +316,7 @@ export class Generator {
     await Promise.all([
       ...promises,
       (async () => {
-        const stream = createStream(join(dir, "index.ts"));
+        const stream = this.createCodeStream(join(dir, "index.ts")) as WriteStream;
         for (const type of ctx.selectionTypes) {
           const selectionTypeName = `${type.name}${suffix}`;
           const selectionFileName = toKebabCase(selectionTypeName);
@@ -294,7 +358,7 @@ export class Generator {
   private async generateInputTypes(inputTypes: GraphQLInputObjectType[]) {
     const dir = join(this.targetDir, "inputs");
     const promises = inputTypes.map(async (type) => {
-      const stream = createStream(join(dir, `${toKebabCase(type.name)}.ts`));
+      const stream = this.createCodeStream(join(dir, `${toKebabCase(type.name)}.ts`)) as WriteStream;
       new InputWriter(type, stream, this.options).write();
       await stream.end();
     });
@@ -304,7 +368,7 @@ export class Generator {
   private async generateEnumTypes(enumTypes: GraphQLEnumType[]) {
     const dir = join(this.targetDir, "enums");
     const promises = enumTypes.map(async (type) => {
-      const stream = createStream(join(dir, `${toKebabCase(type.name)}.ts`));
+      const stream = this.createCodeStream(join(dir, `${toKebabCase(type.name)}.ts`)) as WriteStream;
       new EnumWriter(type, stream, this.options).write();
       await stream.end();
     });
@@ -318,7 +382,7 @@ export class Generator {
     schema: GraphQLSchema,
     typeHierarchy: TypeHierarchyGraph,
   ) {
-    const stream = createStream(join(this.targetDir, "type-hierarchy.ts"));
+    const stream = this.createCodeStream(join(this.targetDir, "type-hierarchy.ts")) as WriteStream;
     new TypeHierarchyWriter(
       schema,
       typeHierarchy,
@@ -329,7 +393,7 @@ export class Generator {
   }
 
   private async generateEnumInputMetadata(schema: GraphQLSchema) {
-    const stream = createStream(join(this.targetDir, "enum-input-metadata.ts"));
+    const stream = this.createCodeStream(join(this.targetDir, "enum-input-metadata.ts")) as WriteStream;
     new EnumInputMetadataWriter(schema, stream, this.options).write();
     await endStream(stream);
   }
@@ -339,7 +403,7 @@ export class Generator {
     types: GraphQLNamedType[],
     typeOnly = true,
   ) {
-    const stream = createStream(join(dir, "index.ts"));
+    const stream = this.createCodeStream(join(dir, "index.ts")) as WriteStream;
     const keyword = typeOnly ? "export type" : "export";
     for (const type of types) {
       stream.write(
@@ -350,13 +414,13 @@ export class Generator {
   }
 
   private async generateAsyncRuntime() {
-    const stream = createStream(join(this.targetDir, "client-runtime.ts"));
+    const stream = this.createCodeStream(join(this.targetDir, "client-runtime.ts")) as WriteStream;
     stream.write(ASYNC_CODE);
     await endStream(stream);
   }
 
   private async generateScalarTypes() {
-    const stream = createStream(join(this.targetDir, "scalar-types.ts"));
+    const stream = this.createCodeStream(join(this.targetDir, "scalar-types.ts")) as WriteStream;
     const analysis = analyzeScalarTypeDeclarations(
       this.options.scalarTypeDeclarations,
     );
@@ -399,7 +463,7 @@ export class Generator {
   }
 
   private async writeIndex(schema: GraphQLSchema, ctx: SelectionContext) {
-    const stream = createStream(join(this.targetDir, "index.ts"));
+    const stream = this.createCodeStream(join(this.targetDir, "index.ts")) as WriteStream;
     const selectionSuffix = this.options.selectionSuffix ?? "Selection";
     stream.write(
       `import type { Selection, ExecutableSelection, SchemaType, ShapeOf, VariablesOf } from "../dist/index.mjs";\n`,

@@ -18,6 +18,9 @@
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
   "types": "./index.ts",
+  "bin": {
+    "typedgql": "./dist/cli.mjs"
+  },
   "exports": {
     ".": {
       "import": {
@@ -65,10 +68,14 @@
   "peerDependencies": {
     "graphql": ">=15.0.0",
     "typescript": ">=5.0.0",
-    "vite": ">=5.0.0"
+    "vite": ">=5.0.0",
+    "prettier": "^3"
   },
   "peerDependenciesMeta": {
     "vite": {
+      "optional": true
+    },
+    "prettier": {
       "optional": true
     }
   },
@@ -77,11 +84,13 @@
     "@vitest/coverage-v8": "^4.0.18",
     "fast-check": "^4.5.3",
     "graphql": "^16.0.0",
+    "tsd": "^0.33.0",
     "tsdown": "0.20.3",
     "typescript": "^5.8.0",
-    "vitest": "^4.0.18"
+    "vitest": "^4.0.18",
+    "prettier": "^3.8.3"
   },
   "dependencies": {
-    "tsd": "^0.33.0"
+    "smol-toml": "^1.6.1"
   }
 }

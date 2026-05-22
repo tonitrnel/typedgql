@@ -22,6 +22,7 @@ pnpm add -D graphql typescript
 
 进阶内容（Subscription、指令、GraphQL 对照）见：
 
+- [配置指南（英文）](./docs/configuration.md) - **新增：配置文件支持**
 - [typedgql 进阶用法（中文）](./docs/advanced-usage.zh-CN.md)
 - [typedgql 运行时接入指南（中文）](./docs/runtime-integration.zh-CN.md)
 - [typedgql Quickstart（英文）](./docs/quickstart.md)
@@ -31,6 +32,28 @@ pnpm add -D graphql typescript
 - [typedgql 运行时接入（英文）](./docs/runtime-integration.md)
 - [typedgql 常见问题（英文）](./docs/troubleshooting.md)
 - [typedgql 生成文件说明（英文）](./docs/generated-files.md)
+
+### 0. 配置文件（可选）
+
+在项目根目录创建 `.typedgqlrc.toml` 文件：
+
+```toml
+# GraphQL schema 源
+schema = "./schema.graphql"
+
+# 生成文件的输出目录（可选）
+outputDir = "./src/__generated"
+
+# 缩进（可选）
+indent = "  "
+
+# 标量类型映射（可选）
+[scalarTypeMap]
+DateTime = "string"
+JSON = "JsonObject"
+```
+
+查看[配置指南](./docs/configuration.md)了解所有可用选项。
 
 ### 1. Vite 插件方式（推荐）
 
@@ -42,9 +65,12 @@ import { typedgql } from "@ptdgrp/typedgql/vite";
 
 export default defineConfig({
   plugins: [
+    // 使用内联选项
     typedgql({ schema: "./schema.graphql" }),
     // 或远程 schema:
     // typedgql({ schema: "http://localhost:4000/graphql" }),
+    // 或使用 .typedgqlrc.toml 配置文件:
+    // typedgql(),
   ],
 });
 ```
@@ -54,16 +80,43 @@ export default defineConfig({
 ### 2. Node 手动生成
 
 ```ts
-import { Generator, loadLocalSchema } from "@ptdgrp/typedgql/node";
+import { Generator, loadLocalSchema, loadConfig } from "@ptdgrp/typedgql/node";
 
+// 方式 1: 使用配置文件
+const config = await loadConfig();
+const generator = new Generator({
+  ...config,
+  schemaLoader: () => loadLocalSchema(config.schema),
+});
+
+// 方式 2: 编程式配置
 const generator = new Generator({
   schemaLoader: () => loadLocalSchema("./schema.graphql"),
+  targetDir: "./src/__generated",
 });
 
 await generator.generate();
 ```
 
-### 3. 运行时执行（基础示例）
+### 3. CLI 命令行工具
+
+如果你有 `.typedgqlrc.toml` 配置文件，可以使用 CLI：
+
+```bash
+# 运行代码生成
+npx typedgql
+
+# 或添加到 package.json scripts
+{
+  "scripts": {
+    "codegen": "typedgql"
+  }
+}
+```
+
+CLI 会自动读取 `.typedgqlrc.toml` 配置并生成类型。
+
+### 4. 运行时执行（基础示例）
 
 ```ts
 import { G, execute, setGraphQLExecutor } from "@ptdgrp/typedgql";
@@ -84,7 +137,7 @@ const selection = G.query((q) =>
 const data = await execute(selection);
 ```
 
-### 4. 带变量查询（推荐写法）
+### 5. 带变量查询（推荐写法）
 
 `selection` 与变量传值解耦：selection 可复用，变量在执行时传入。
 
@@ -98,7 +151,7 @@ const data = await execute(selection, {
 });
 ```
 
-### 5. 显式变量占位（可选）
+### 6. 显式变量占位（可选）
 
 ```ts
 import { G, execute, ParameterRef } from "@ptdgrp/typedgql";

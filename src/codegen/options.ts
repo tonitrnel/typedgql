@@ -18,6 +18,7 @@ export interface CodegenOptions {
    * Output directory for generated files.
    *
    * If omitted, generator default path is used by caller.
+   * @alias outputDir - Can also be specified as `outputDir` in config files
    */
   readonly targetDir?: string;
   /**
