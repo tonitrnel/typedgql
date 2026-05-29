@@ -14,6 +14,7 @@ import {
 } from "graphql";
 import { CodegenOptions } from "./options";
 import { CODEGEN_IMPORT_SOURCE_MAP, SCALAR_TYPES_NAMESPACE } from "./imports";
+import type { CodegenImportSymbol, JSImportSourceMap } from "./imports";
 
 export type ScopeType = "blank" | "block" | "parameters" | "array" | "generic";
 
@@ -87,6 +88,7 @@ export abstract class Writer {
   constructor(
     private readonly stream: WriteStream,
     protected readonly options: CodegenOptions,
+    protected readonly importSourceMap: JSImportSourceMap<CodegenImportSymbol> = CODEGEN_IMPORT_SOURCE_MAP,
   ) {
     this.indent = options.indent ?? "    ";
   }
@@ -340,7 +342,7 @@ export abstract class Writer {
 
   private writeMappedScalarImports(): void {
     if (!this.usesScalarTypeNamespaceImport) return;
-    const source = CODEGEN_IMPORT_SOURCE_MAP.SCALAR_TYPE_NAMESPACE.source;
+    const source = this.importSourceMap.SCALAR_TYPE_NAMESPACE.source;
     const importSource = this.isUnderGlobalDir()
       ? source.replace(/^\.\.\//, "./")
       : source;

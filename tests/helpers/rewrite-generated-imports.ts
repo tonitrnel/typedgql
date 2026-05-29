@@ -25,7 +25,7 @@ export async function rewriteGeneratedImportsToSrcEntry(
       const targetImport = rel.startsWith(".") ? rel : `./${rel}`;
       const src = await readFile(fullPath, "utf8");
       const next = src.replace(
-        /(['"])(?:\.\.\/|\.\/)+dist\/index\.mjs\1/g,
+        /(['"])(?:(?:\.\.\/|\.\/)+dist\/index\.mjs|@ptdgrp\/typedgql)\1/g,
         (_all, q: string) => `${q}${targetImport}${q}`,
       );
       if (next !== src) {

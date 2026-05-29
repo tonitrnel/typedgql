@@ -7,7 +7,7 @@ import {
   GraphQLNonNull,
 } from "graphql";
 import { Generator } from "../generator";
-import { mkdtemp, readdir, access } from "fs/promises";
+import { mkdtemp, readdir, access, readFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
 import { rm } from "fs/promises";
@@ -106,6 +106,31 @@ describe("代码生成输出完整性", () => {
       } finally {
         await rm(tmpDir, { recursive: true, force: true });
       }
+    }
+  });
+
+  it("emits eslint-disable header in scalar-types.ts", async () => {
+    const tmpDir = await mkdtemp(join(tmpdir(), "typedgql-test-"));
+    const targetDir = join(tmpDir, "__generated");
+
+    try {
+      const schema = buildSchema(["Task"]);
+      const generator = new Generator({
+        schemaLoader: async () => schema,
+        targetDir,
+        prettier: false,
+        scalarTypeDeclarations: "export type JsonValue = string;",
+      });
+
+      await generator.generate();
+
+      const content = await readFile(
+        join(targetDir, "scalar-types.ts"),
+        "utf-8",
+      );
+      expect(content.startsWith("/* eslint-disable */\n")).toBe(true);
+    } finally {
+      await rm(tmpDir, { recursive: true, force: true });
     }
   });
 

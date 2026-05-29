@@ -12,24 +12,25 @@ import {
 import { CodegenOptions } from "../options";
 import { Writer } from "../writer";
 import {
-  CODEGEN_IMPORT_SOURCE_MAP,
   EnumInputMetadataWriterImportSymbol,
   JSImportCollector,
 } from "../imports";
+import type { CodegenImportSymbol, JSImportSourceMap } from "../imports";
 
 export class EnumInputMetadataWriter extends Writer {
   constructor(
     private readonly schema: GraphQLSchema,
     stream: WriteStream,
     options: CodegenOptions,
+    importSourceMap?: JSImportSourceMap<CodegenImportSymbol>,
   ) {
-    super(stream, options);
+    super(stream, options, importSourceMap);
   }
 
   protected prepareImports() {
     const imports = new JSImportCollector<EnumInputMetadataWriterImportSymbol>(
       (stmt) => this.importStatement(stmt),
-      CODEGEN_IMPORT_SOURCE_MAP,
+      this.importSourceMap,
     );
     imports.useMapped("EnumInputMetadataBuilder");
     imports.emit();
@@ -37,7 +38,10 @@ export class EnumInputMetadataWriter extends Writer {
 
   protected writeCode() {
     const processedTypeNames = new Set<string>();
-    const enumInputMetaTypeMap = new Map<string, ReadonlyArray<GraphQLInputField> | undefined>();
+    const enumInputMetaTypeMap = new Map<
+      string,
+      ReadonlyArray<GraphQLInputField> | undefined
+    >();
     for (const type of Object.values(this.schema.getTypeMap())) {
       if (
         !(type instanceof GraphQLEnumType) &&
@@ -57,7 +61,9 @@ export class EnumInputMetadataWriter extends Writer {
           for (const field of fields) {
             this.separator(", ");
             this.scope({ type: "block" }, () => {
-              this.text(`name: "${field.name}", typeName: "${EnumInputMetadataWriter.inputTypeName(field.type)}", graphqlTypeName: "${EnumInputMetadataWriter.graphqlTypeName(field.type)}"`);
+              this.text(
+                `name: "${field.name}", typeName: "${EnumInputMetadataWriter.inputTypeName(field.type)}", graphqlTypeName: "${EnumInputMetadataWriter.graphqlTypeName(field.type)}"`,
+              );
               if (EnumInputMetadataWriter.isLeafInputType(field.type)) {
                 this.text(", isLeaf: true");
               }

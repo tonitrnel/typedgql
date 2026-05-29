@@ -20,11 +20,8 @@ import {
 import { CodegenOptions } from "../options";
 import { ImportingBehavior, Writer } from "../writer";
 import { SelectionContext } from "../selection-context";
-import {
-  CODEGEN_IMPORT_SOURCE_MAP,
-  JSImportCollector,
-  SelectionImportSymbol,
-} from "../imports";
+import { JSImportCollector, SelectionImportSymbol } from "../imports";
+import type { CodegenImportSymbol, JSImportSourceMap } from "../imports";
 
 type FieldCategory = "SCALAR" | "LIST" | "REFERENCE" | "ID";
 
@@ -55,8 +52,9 @@ export class SelectionWriter extends Writer {
     protected ctx: SelectionContext,
     stream: WriteStream,
     options: CodegenOptions,
+    importSourceMap?: JSImportSourceMap<CodegenImportSymbol>,
   ) {
-    super(stream, options);
+    super(stream, options, importSourceMap);
 
     this.selectionTypeName = `${this.modelType.name}${options.selectionSuffix ?? "Selection"}`;
 
@@ -207,7 +205,7 @@ export class SelectionWriter extends Writer {
   protected prepareImports() {
     const imports = new JSImportCollector<SelectionImportSymbol>(
       (stmt) => this.importStatement(stmt),
-      CODEGEN_IMPORT_SOURCE_MAP,
+      this.importSourceMap,
     );
 
     imports.useMapped("DirectiveArgs");
@@ -372,9 +370,7 @@ export class SelectionWriter extends Writer {
 
     t(`\n$on<XSelection extends ${selfSelectionType}<object, object>>`);
     this.scope({ type: "parameters", multiLines: true }, () => {
-      t(
-        `builder: (it: ${selfSelectionType}<{}, {}>) => XSelection`,
-      );
+      t(`builder: (it: ${selfSelectionType}<{}, {}>) => XSelection`);
     });
     t(`: ${this.selectionTypeName}`);
     this.scope({ type: "generic", multiLines: true }, () => {

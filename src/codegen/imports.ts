@@ -81,35 +81,73 @@ export class JSImportCollector<TSymbol extends string = string> {
   }
 }
 
-const RUNTIME_ENTRY_SOURCE = "../../dist/index.mjs";
+const DEFAULT_RUNTIME_ENTRY_SOURCE = "../../dist/index.mjs";
+const DEFAULT_ROOT_RUNTIME_ENTRY_SOURCE = "../dist/index.mjs";
 const TYPE_HIERARCHY_SOURCE = "../type-hierarchy";
 const ENUM_INPUT_METADATA_SOURCE = "../enum-input-metadata";
 const SCALAR_TYPES_SOURCE = "../scalar-types";
 export const SCALAR_TYPES_NAMESPACE = "UserScalarTypes";
 
 export const CODEGEN_IMPORT_SOURCE_MAP = {
-  AcceptableVariables: { source: RUNTIME_ENTRY_SOURCE, kind: "type" },
-  UnresolvedVariables: { source: RUNTIME_ENTRY_SOURCE, kind: "type" },
-  DirectiveArgs: { source: RUNTIME_ENTRY_SOURCE, kind: "type" },
-  Selection: { source: RUNTIME_ENTRY_SOURCE, kind: "type" },
-  ShapeOf: { source: RUNTIME_ENTRY_SOURCE, kind: "type" },
-  VariablesOf: { source: RUNTIME_ENTRY_SOURCE, kind: "type" },
-  ValueOrThunk: { source: RUNTIME_ENTRY_SOURCE, kind: "type" },
-  FragmentSpread: { source: RUNTIME_ENTRY_SOURCE, kind: "type" },
-  createSelection: { source: RUNTIME_ENTRY_SOURCE, kind: "value" },
-  withOperationName: { source: RUNTIME_ENTRY_SOURCE, kind: "value" },
-  createSchemaType: { source: RUNTIME_ENTRY_SOURCE, kind: "value" },
-  registerSchemaTypeFactory: { source: RUNTIME_ENTRY_SOURCE, kind: "value" },
-  resolveRegisteredSchemaType: { source: RUNTIME_ENTRY_SOURCE, kind: "value" },
+  AcceptableVariables: { source: DEFAULT_RUNTIME_ENTRY_SOURCE, kind: "type" },
+  UnresolvedVariables: { source: DEFAULT_RUNTIME_ENTRY_SOURCE, kind: "type" },
+  DirectiveArgs: { source: DEFAULT_RUNTIME_ENTRY_SOURCE, kind: "type" },
+  Selection: { source: DEFAULT_RUNTIME_ENTRY_SOURCE, kind: "type" },
+  ShapeOf: { source: DEFAULT_RUNTIME_ENTRY_SOURCE, kind: "type" },
+  VariablesOf: { source: DEFAULT_RUNTIME_ENTRY_SOURCE, kind: "type" },
+  ValueOrThunk: { source: DEFAULT_RUNTIME_ENTRY_SOURCE, kind: "type" },
+  FragmentSpread: { source: DEFAULT_RUNTIME_ENTRY_SOURCE, kind: "type" },
+  createSelection: { source: DEFAULT_RUNTIME_ENTRY_SOURCE, kind: "value" },
+  withOperationName: { source: DEFAULT_RUNTIME_ENTRY_SOURCE, kind: "value" },
+  createSchemaType: { source: DEFAULT_RUNTIME_ENTRY_SOURCE, kind: "value" },
+  registerSchemaTypeFactory: {
+    source: DEFAULT_RUNTIME_ENTRY_SOURCE,
+    kind: "value",
+  },
+  resolveRegisteredSchemaType: {
+    source: DEFAULT_RUNTIME_ENTRY_SOURCE,
+    kind: "value",
+  },
   ENUM_INPUT_METADATA: { source: ENUM_INPUT_METADATA_SOURCE, kind: "value" },
   SCALAR_TYPE_NAMESPACE: { source: SCALAR_TYPES_SOURCE, kind: "type" },
   WithTypeName: { source: TYPE_HIERARCHY_SOURCE, kind: "type" },
   ImplementationType: { source: TYPE_HIERARCHY_SOURCE, kind: "type" },
   EnumInputMetadataBuilder: {
-    source: "../dist/index.mjs",
+    source: DEFAULT_ROOT_RUNTIME_ENTRY_SOURCE,
     kind: "value",
   },
 } as const satisfies JSImportSourceMap;
+
+export function createCodegenImportSourceMap(options: {
+  readonly runtimeEntrySource?: string;
+  readonly rootRuntimeEntrySource?: string;
+}): JSImportSourceMap<keyof typeof CODEGEN_IMPORT_SOURCE_MAP> {
+  const runtimeEntrySource =
+    options.runtimeEntrySource ?? DEFAULT_RUNTIME_ENTRY_SOURCE;
+  const rootRuntimeEntrySource =
+    options.rootRuntimeEntrySource ?? DEFAULT_ROOT_RUNTIME_ENTRY_SOURCE;
+
+  return {
+    ...CODEGEN_IMPORT_SOURCE_MAP,
+    AcceptableVariables: { source: runtimeEntrySource, kind: "type" },
+    UnresolvedVariables: { source: runtimeEntrySource, kind: "type" },
+    DirectiveArgs: { source: runtimeEntrySource, kind: "type" },
+    Selection: { source: runtimeEntrySource, kind: "type" },
+    ShapeOf: { source: runtimeEntrySource, kind: "type" },
+    VariablesOf: { source: runtimeEntrySource, kind: "type" },
+    ValueOrThunk: { source: runtimeEntrySource, kind: "type" },
+    FragmentSpread: { source: runtimeEntrySource, kind: "type" },
+    createSelection: { source: runtimeEntrySource, kind: "value" },
+    withOperationName: { source: runtimeEntrySource, kind: "value" },
+    createSchemaType: { source: runtimeEntrySource, kind: "value" },
+    registerSchemaTypeFactory: { source: runtimeEntrySource, kind: "value" },
+    resolveRegisteredSchemaType: { source: runtimeEntrySource, kind: "value" },
+    EnumInputMetadataBuilder: {
+      source: rootRuntimeEntrySource,
+      kind: "value",
+    },
+  };
+}
 
 export type CodegenImportSymbol = keyof typeof CODEGEN_IMPORT_SOURCE_MAP;
 

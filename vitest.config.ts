@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config";
+import { resolve } from "node:path";
 
 export default defineConfig({
   test: {
@@ -8,11 +9,12 @@ export default defineConfig({
       reporter: ["text", "html", "json-summary"],
       reportsDirectory: "coverage",
       include: ["src/**/*.ts"],
-      exclude: [
-        "src/**/__tests__/**",
-        "src/**/*.test.ts",
-        "tests/**",
-      ],
+      exclude: ["src/**/__tests__/**", "src/**/*.test.ts", "tests/**"],
+    },
+  },
+  resolve: {
+    alias: {
+      "@ptdgrp/typedgql": resolve(__dirname, "src/index.ts"),
     },
   },
 });
