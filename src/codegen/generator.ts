@@ -78,9 +78,14 @@ export class Generator {
     
     // Check if output is in node_modules
     this.isCustomOutputDir = !normalizedPath.includes("node_modules");
+
+    if (this.options.prettier === false) {
+      this.usePrettier = false;
+      return;
+    }
     
-    // Only use prettier for custom output directories
-    if (this.isCustomOutputDir) {
+    // Only use prettier automatically for custom output directories.
+    if (this.options.prettier === true || this.isCustomOutputDir) {
       this.usePrettier = await isPrettierAvailable();
       if (this.usePrettier) {
         console.log("[typedgql] Prettier detected, will format generated files");

@@ -22,6 +22,14 @@ export interface CodegenOptions {
    */
   readonly targetDir?: string;
   /**
+   * Whether to format generated files with Prettier.
+   *
+   * - `undefined`: auto-detect Prettier for custom output directories.
+   * - `true`: format when Prettier is available.
+   * - `false`: never format generated files.
+   */
+  readonly prettier?: boolean;
+  /**
    * Indentation string used in generated files.
    *
    * @default "    " (4 spaces)

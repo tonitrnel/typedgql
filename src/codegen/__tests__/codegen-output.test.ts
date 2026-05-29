@@ -135,6 +135,7 @@ describe("Codegen output (blog schema)", () => {
         const generator = new Generator({
             schemaLoader: async () => schema,
             targetDir,
+            prettier: false,
         });
         await generator.generate();
     });
@@ -374,6 +375,7 @@ describe("Codegen output (subscription root)", () => {
             const generator = new Generator({
                 schemaLoader: async () => schemaWithSubscription,
                 targetDir,
+                prettier: false,
             });
             await generator.generate();
 
@@ -426,6 +428,7 @@ describe("Codegen output (oneOf input)", () => {
             const generator = new Generator({
                 schemaLoader: async () => schemaWithOneOf,
                 targetDir,
+                prettier: false,
             });
             await generator.generate();
 

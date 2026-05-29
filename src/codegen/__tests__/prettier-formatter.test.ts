@@ -8,6 +8,10 @@ describe("prettier-formatter", () => {
   });
 
   it("returns original code when prettier is unavailable", async () => {
+    vi.doMock("prettier", () => {
+      throw new Error("Cannot find module 'prettier'");
+    });
+
     const { formatWithPrettier, isPrettierAvailable } = await import(
       "../prettier-formatter"
     );
