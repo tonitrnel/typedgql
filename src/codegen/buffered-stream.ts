@@ -1,4 +1,3 @@
-import { WriteStream } from "fs";
 import { writeFile } from "fs/promises";
 
 /**
@@ -48,13 +47,15 @@ export class BufferedStream {
   /**
    * Write the buffered content to disk.
    */
-  async flush(formatter?: (content: string, path: string) => Promise<string>): Promise<void> {
+  async flush(
+    formatter?: (content: string, path: string) => Promise<string>,
+  ): Promise<void> {
     let content = this.getContent();
-    
+
     if (formatter) {
       content = await formatter(content, this.path);
     }
-    
+
     await writeFile(this.path, content, "utf-8");
   }
 

@@ -15,9 +15,10 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "paths": {
-      "@ptdgrp/typedgql": ["./src/index.ts"],
-    },
+      "@ptdgrp/typedgql/runtime": ["./src/runtime.ts"],
+      "@ptdgrp/typedgql": ["./src/index.ts"]
+    }
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "examples"],
+  "exclude": ["node_modules", "dist", "examples"]
 }

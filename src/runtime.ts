@@ -1,0 +1,51 @@
+export type {
+  Selection,
+  ExecutableSelection,
+  ShapeOf,
+  VariablesOf,
+  Expand,
+  FieldSelection,
+  DirectiveArgs,
+  ValueOrThunk,
+} from "./runtime/types";
+export {
+  FragmentSpread,
+  FragmentRef,
+  StringValue,
+  runtimeOf,
+} from "./runtime/types";
+
+export type {
+  SchemaType,
+  SchemaField,
+  SchemaTypeCategory,
+  SchemaFieldCategory,
+} from "./runtime/schema";
+export {
+  createSchemaType,
+  resolveRegisteredSchemaType,
+  registerSchemaTypeFactory,
+} from "./runtime/schema";
+
+export { SelectionImpl as SelectionNode } from "./runtime/selection";
+export { withOperationName } from "./runtime/selection";
+export { createSelection } from "./runtime/proxy";
+
+export type {
+  AcceptableVariables,
+  UnresolvedVariables,
+} from "./runtime/parameter";
+export {
+  ParameterRef,
+  __marker as __parameterRefMarker,
+} from "./runtime/parameter";
+export type { FieldOptions } from "./runtime/field-options";
+
+export type {
+  EnumInputMetadata,
+  EnumInputMetaType,
+} from "./runtime/enum-metadata";
+export { EnumInputMetadataBuilder } from "./runtime/enum-metadata";
+
+export { TextBuilder } from "./runtime/text-builder";
+export { cyrb53 } from "./runtime/cyrb53";

@@ -190,7 +190,7 @@ describe("Codegen output (blog schema)", () => {
   it("index.ts re-exports client runtime and type hierarchy helpers", async () => {
     const content = await readFile(join(targetDir, "index.ts"), "utf-8");
     expect(content.startsWith(generatedFileHeader)).toBe(true);
-    expect(content).toContain('from "@ptdgrp/typedgql"');
+    expect(content).toContain('from "@ptdgrp/typedgql/runtime"');
     expect(content).not.toContain('from "../dist/index.mjs"');
     expect(content).toContain('from "./client-runtime"');
     expect(content).toContain("GraphQLExecutor");
@@ -254,7 +254,7 @@ describe("Codegen output (blog schema)", () => {
       "utf-8",
     );
     expect(content.startsWith(generatedFileHeader)).toBe(true);
-    expect(content).toContain("from '@ptdgrp/typedgql'");
+    expect(content).toContain("from '@ptdgrp/typedgql/runtime'");
     expect(content).not.toContain('from "../../dist/index.mjs"');
     // Interface declaration
     expect(content).toContain("export interface TagSelection<");
@@ -326,7 +326,7 @@ describe("Codegen output (blog schema)", () => {
       "utf-8",
     );
     expect(content.startsWith(generatedFileHeader)).toBe(true);
-    expect(content).toContain('from "@ptdgrp/typedgql"');
+    expect(content).toContain('from "@ptdgrp/typedgql/runtime"');
     expect(content).not.toContain('from "../dist/index.mjs"');
     expect(content).toContain("GraphQLExecutor");
     expect(content).toContain("GraphQLSubscriber");

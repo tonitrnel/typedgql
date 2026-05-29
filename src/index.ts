@@ -1,4 +1,3 @@
-// ─── Public types ─────────────────────────────────────────────────────
 export type {
   Selection,
   ExecutableSelection,
@@ -8,52 +7,30 @@ export type {
   FieldSelection,
   DirectiveArgs,
   ValueOrThunk,
-} from "./runtime/types";
+  SchemaType,
+  SchemaField,
+  SchemaTypeCategory,
+  SchemaFieldCategory,
+  AcceptableVariables,
+  UnresolvedVariables,
+  FieldOptions,
+  EnumInputMetadata,
+  EnumInputMetaType,
+} from "./runtime";
 export {
   FragmentSpread,
   FragmentRef,
   StringValue,
   runtimeOf,
-} from "./runtime/types";
-
-// ─── Schema metadata ─────────────────────────────────────────────────
-export type {
-  SchemaType,
-  SchemaField,
-  SchemaTypeCategory,
-  SchemaFieldCategory,
-} from "./runtime/schema";
-export {
   createSchemaType,
   resolveRegisteredSchemaType,
   registerSchemaTypeFactory,
-} from "./runtime/schema";
-
-// ─── Selection runtime ───────────────────────────────────────────────
-export { SelectionImpl as SelectionNode } from "./runtime/selection";
-export { withOperationName } from "./runtime/selection";
-export { createSelection } from "./runtime/proxy";
-
-// ─── Parameters & Options ─────────────────────────────────────────────
-export type {
-  AcceptableVariables,
-  UnresolvedVariables,
-} from "./runtime/parameter";
-export {
+  SelectionNode,
+  withOperationName,
+  createSelection,
   ParameterRef,
-  __marker as __parameterRefMarker,
-} from "./runtime/parameter";
-export type { FieldOptions } from "./runtime/field-options";
-
-// ─── Enum metadata ───────────────────────────────────────────────────
-export type {
-  EnumInputMetadata,
-  EnumInputMetaType,
-} from "./runtime/enum-metadata";
-export { EnumInputMetadataBuilder } from "./runtime/enum-metadata";
-
-// ─── TextBuilder ─────────────────────────────────────────────────────
-export { TextBuilder } from "./runtime/text-builder";
-
-// ─── Utilities ───────────────────────────────────────────────────────
-export { cyrb53 } from "./runtime/cyrb53";
+  __parameterRefMarker,
+  EnumInputMetadataBuilder,
+  TextBuilder,
+  cyrb53,
+} from "./runtime";

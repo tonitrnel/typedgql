@@ -8,7 +8,6 @@ import {
   GraphQLNamedType,
   GraphQLNonNull,
   GraphQLObjectType,
-  GraphQLType,
   GraphQLUnionType,
 } from "graphql";
 import {
@@ -1026,7 +1025,7 @@ const COMMENT = `/*
  * Any instance of this interface is immutable,
  * all the properties and functions can only be used to create new instances,
  * they cannot modify the current instance.
- * 
+ *
  * So any instance of this interface is reuseable.
  */
 `;

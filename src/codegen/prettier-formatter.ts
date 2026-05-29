@@ -1,5 +1,3 @@
-import { resolve } from "node:path";
-
 /**
  * Prettier instance type (dynamically imported)
  */

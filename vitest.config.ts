@@ -14,6 +14,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
+      "@ptdgrp/typedgql/runtime": resolve(__dirname, "src/runtime.ts"),
       "@ptdgrp/typedgql": resolve(__dirname, "src/index.ts"),
     },
   },

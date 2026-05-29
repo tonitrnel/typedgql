@@ -8,7 +8,7 @@ function toPosixPath(path: string): string {
 export async function rewriteGeneratedImportsToSrcEntry(
   generatedDir: string,
 ): Promise<void> {
-  const srcIndex = join(process.cwd(), "src", "index");
+  const srcRuntime = join(process.cwd(), "src", "runtime");
 
   async function walk(dir: string): Promise<void> {
     const entries = await readdir(dir);
@@ -21,11 +21,11 @@ export async function rewriteGeneratedImportsToSrcEntry(
       }
       if (!fullPath.endsWith(".ts")) continue;
 
-      const rel = toPosixPath(relative(dirname(fullPath), srcIndex));
+      const rel = toPosixPath(relative(dirname(fullPath), srcRuntime));
       const targetImport = rel.startsWith(".") ? rel : `./${rel}`;
       const src = await readFile(fullPath, "utf8");
       const next = src.replace(
-        /(['"])(?:(?:\.\.\/|\.\/)+dist\/index\.mjs|@ptdgrp\/typedgql)\1/g,
+        /(['"])(?:(?:\.\.\/|\.\/)+dist\/index\.mjs|@ptdgrp\/typedgql\/runtime)\1/g,
         (_all, q: string) => `${q}${targetImport}${q}`,
       );
       if (next !== src) {
