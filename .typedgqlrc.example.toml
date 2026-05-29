@@ -44,16 +44,18 @@ tsEnum = "string"
 
 # HTTP headers for remote schema fetching (optional)
 # Only used when schema is a URL
-[schemaHeaders]
-Authorization = "Bearer token123"
-"X-Custom-Header" = "value"
+schemaHeaders = {
+  Authorization = "Bearer token123",
+  "X-Custom-Header" = "value",
+}
 
 # Scalar type mapping (optional)
 # Maps GraphQL scalar types to TypeScript types
-[scalarTypeMap]
-DateTime = "string"
-JSON = "JsonObject"
-UUID = "string"
+scalarTypeMap = {
+  DateTime = "string",
+  JSON = "JsonObject",
+  UUID = "string",
+}
 
 # TypeScript declarations for scalar types (optional)
 # Only type/interface declarations are allowed
@@ -79,11 +81,13 @@ export interface Point {
 """
 
 # Override ID field name per GraphQL type (optional)
-[idFieldMap]
-User = "userId"
-Post = "postId"
+idFieldMap = {
+  User = "userId",
+  Post = "postId",
+}
 
 # Exclude fields from default selection ($$) per type (optional)
-[defaultSelectionExcludeMap]
-User = ["password", "internalData"]
-Post = ["metadata"]
+defaultSelectionExcludeMap = {
+  User = ["password", "internalData"],
+  Post = ["metadata"],
+}
